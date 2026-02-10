@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import type { Barbero, Sucursal, DiasSemana } from '@/lib/types'
 
 // Simple CSS pattern for lunch
@@ -23,8 +24,8 @@ export function HorarioGanttModal({ isOpen, onClose, barberos, sucursal }: Horar
     // Generate time slots (every 30 mins)
     // We'll base the start/end on the Sucursal's max range or a fixed range (e.g. 7am to 10pm)
     // For visualization, 08:00 to 20:00 is standard, but flexible is better.
-    const START_HOUR = 8
-    const END_HOUR = 21
+    const START_HOUR = 7
+    const END_HOUR = 24
 
     const hours = useMemo(() => {
         const h = []
@@ -34,7 +35,7 @@ export function HorarioGanttModal({ isOpen, onClose, barberos, sucursal }: Horar
         return h
     }, [])
 
-    if (!isOpen) return null
+
 
     // Helper to check if a specific time is within a range string "HH:MM"-"HH:MM"
     const isWithinTime = (time: number, rangeStr?: { inicio: string, fin: string } | { apertura: string, cierre: string } | null) => {
@@ -57,8 +58,19 @@ export function HorarioGanttModal({ isOpen, onClose, barberos, sucursal }: Horar
     // Get current day's Sucursal schedule
     const sucursalSchedule = sucursal?.horario_apertura?.[selectedDay]
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    // Handle hydration/SSR safely
+    const [mounted, setMounted] = useState(false)
+    useEffect(() => {
+        setMounted(true)
+        return () => setMounted(false)
+    }, [])
+
+    if (!isOpen || !mounted) return null
+
+    // Portal to body to avoid stacking context issues with Sidebar
+
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
             <style>{styles}</style>
             <div className="bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 w-full max-w-6xl max-h-[90vh] flex flex-col">
                 {/* Header */}
@@ -219,6 +231,7 @@ export function HorarioGanttModal({ isOpen, onClose, barberos, sucursal }: Horar
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     )
 }
