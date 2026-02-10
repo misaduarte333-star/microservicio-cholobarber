@@ -13,6 +13,7 @@ export default function AdminDashboard() {
         ingresos: 0,
         noShows: 0
     })
+    const [recentCitas, setRecentCitas] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [currentTime, setCurrentTime] = useState(new Date())
 
@@ -35,7 +36,7 @@ export default function AdminDashboard() {
             // 1. Fetch Citas Today
             const { data: citasHoy, error: errorCitas } = await (supabase
                 .from('citas') as any)
-                .select('*, servicio:servicios(precio)')
+                .select('*, servicio:servicios(nombre, precio)')
                 .gte('timestamp_inicio', inicioDelDia)
                 .lte('timestamp_inicio', finDelDia)
 
@@ -61,6 +62,12 @@ export default function AdminDashboard() {
                 ingresos,
                 noShows
             })
+
+            // Sort for Recent Citas (Chronological)
+            const sortedCitas = [...(citasHoy || [])].sort((a: any, b: any) => 
+                new Date(a.timestamp_inicio).getTime() - new Date(b.timestamp_inicio).getTime()
+            )
+            setRecentCitas(sortedCitas.slice(0, 5))
 
             // 4. Calculate Barber Status
             if (barberos) {
@@ -182,38 +189,38 @@ export default function AdminDashboard() {
                         */}
                     </div>
                     <div className="space-y-3 mt-2">
-                        {/* We can access 'citasHoy' but it's not saved in state outside the callback. 
-                            Let's skip refactoring Recents for this specific step to avoid scope creep 
-                            unless easy. Actually let's just leave the hardcoded ones temporarily or 
-                            re-fetch. The user asked specifically about Barber Status. 
-                            I will just hide the hardcoded ones to avoid confusion or keep them as PLACEHOLDER? 
-                            Let's keep the hardcoded list for a second or remove it. 
-                            Actually, better to leave the previous Recent list structure but I am replacing the whole block.
-                            I will restore the hardcoded list to minimize regression, focus on BarberStatus.
-                        */}
-                        {[
-                            { nombre: 'Carlos Mendoza', servicio: 'Corte', hora: '10:00', estado: 'en_proceso' },
-                            { nombre: 'Roberto García', servicio: 'Barba', hora: '11:00', estado: 'confirmada' },
-                            { nombre: 'Miguel Torres', servicio: 'Combo', hora: '12:00', estado: 'confirmada' },
-                        ].map((cita, i) => (
-                            <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-800/50">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center text-sm font-medium text-white">
-                                        {cita.nombre.charAt(0)}
+                        {recentCitas.length === 0 ? (
+                            <p className="text-slate-500 text-sm text-center py-4">No hay citas registradas para hoy</p>
+                        ) : (
+                            recentCitas.map((cita) => {
+                                const hora = new Date(cita.timestamp_inicio).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+                                return (
+                                    <div key={cita.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center text-sm font-medium text-white">
+                                                {cita.cliente_nombre.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium text-white">{cita.cliente_nombre}</p>
+                                                <p className="text-xs text-slate-400">
+                                                    {cita.servicio?.nombre || 'Servicio General'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-sm text-white">{hora}</p>
+                                            <span className={`text-xs ${cita.estado === 'en_proceso' ? 'text-emerald-400' :
+                                                    cita.estado === 'confirmada' ? 'text-blue-400' :
+                                                        cita.estado === 'en_espera' ? 'text-amber-400' :
+                                                            'text-slate-400'
+                                                }`}>
+                                                {cita.estado.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-white">{cita.nombre}</p>
-                                        <p className="text-xs text-slate-400">{cita.servicio}</p>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-sm text-white">{cita.hora}</p>
-                                    <span className={`text-xs ${cita.estado === 'en_proceso' ? 'text-emerald-400' : 'text-blue-400'}`}>
-                                        {cita.estado === 'en_proceso' ? 'En Proceso' : 'Confirmada'}
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
+                                )
+                            })
+                        )}
                     </div>
                 </div>
 
