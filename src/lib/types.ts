@@ -38,6 +38,12 @@ export interface Sucursal {
     nombre: string
     direccion: string | null
     telefono_whatsapp: string
+    google_maps_url: string | null
+    ubicacion: string | null
+    telefono_fijo: string | null
+    email_contacto: string | null
+    instagram_url: string | null
+    zona_ubicacion: string | null
     horario_apertura: HorarioApertura
     activa: boolean
     created_at: string
