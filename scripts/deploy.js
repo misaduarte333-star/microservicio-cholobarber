@@ -26,7 +26,7 @@ try {
       execSync(`git commit -m "${commitMsg}"`, { stdio: 'inherit' });
 
       console.log("☁️ Subiendo cambios al repositorio remoto...");
-      execSync('git push', { stdio: 'inherit' });
+      execSync('git push --set-upstream origin main', { stdio: 'inherit' });
 
       console.log("🎉 ¡Despliegue completado! Easypanel detectará el push y reiniciará el App.");
     } catch (gitError) {
