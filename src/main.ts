@@ -88,9 +88,9 @@ app.get('/api/config/provider', requireAuth, ProviderController.getConfig);
 app.post('/api/config/provider', requireAuth, ProviderController.setActive);
 app.post('/api/config/provider/key', requireAuth, ProviderController.saveKey);
 app.post('/api/config/provider/test', requireAuth, ProviderController.testProvider);
-app.get('/', (_req, res) => res.redirect('/app.html'));
-app.get('/dashboard', (_req, res) => res.redirect('/app.html'));
-app.get('/providers', (_req, res) => res.redirect('/app.html'));
+app.get('/dashboard', (_req, res) => res.redirect('/'));
+app.get('/providers', (_req, res) => res.redirect('/'));
+app.get('/chat', (_req, res) => res.redirect('/'));
 
 async function autoConfigureNgrokWebhook() {
   const ngrokApiUrl = process.env.NGROK_API_URL;
