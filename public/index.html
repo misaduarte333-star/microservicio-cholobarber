@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CholoBot Debug Interface</title>
+    <style>
+        :root {
+            --primary: #cda260;
+            --bg: #0f0f0f;
+            --card: #181818;
+            --text: #e0e0e0;
+            --accent: #2c2c2c;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        /* Layout */
+        .chat-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #333;
+        }
+        .log-section {
+            width: 450px;
+            background: #0a0a0a;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            padding: 15px 25px;
+            background: #151515;
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header h2 {
+            margin: 0;
+            color: var(--primary);
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* Messages */
+        .messages {
+            flex: 1;
+            padding: 25px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .message {
+            max-width: 85%;
+            padding: 12px 18px;
+            border-radius: 12px;
+            line-height: 1.5;
+            font-size: 0.95rem;
+            position: relative;
+        }
+        .user {
+            align-self: flex-end;
+            background: var(--primary);
+            color: black;
+            font-weight: 500;
+        }
+        .bot {
+            align-self: flex-start;
+            background: var(--accent);
+            border: 1px solid #444;
+        }
+
+        /* Input Area */
+        .input-area {
+            padding: 20px 25px;
+            background: #151515;
+            display: flex;
+            gap: 12px;
+            border-top: 1px solid #333;
+        }
+        input {
+            flex: 1;
+            background: #252525;
+            border: 1px solid #444;
+            color: white;
+            padding: 14px;
+            border-radius: 8px;
+            outline: none;
+            font-size: 1rem;
+        }
+        input:focus {
+            border-color: var(--primary);
+        }
+        button {
+            background: var(--primary);
+            border: none;
+            padding: 0 25px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+            color: black;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.1);
+        }
+
+        /* Logs Section */
+        .log-header {
+            padding: 15px 20px;
+            background: #111;
+            border-bottom: 1px solid #333;
+            font-size: 0.8rem;
+            color: #888;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .log-content {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85rem;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .log-item {
+            padding: 10px;
+            background: #1a1a1a;
+            border-left: 3px solid #444;
+            border-radius: 4px;
+        }
+        .log-tool {
+            color: #61afef;
+            font-weight: bold;
+        }
+        .log-args {
+            color: #98c379;
+            word-break: break-all;
+        }
+        .log-res {
+            color: #d19a66;
+            margin-top: 4px;
+            border-top: 1px solid #333;
+            padding-top: 4px;
+        }
+        
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="chat-section">
+    <div class="header">
+        <h2>CholoBot Debug Mode</h2>
+        <div style="display:flex;gap:12px;align-items:center">
+            <a href="/dashboard.html" style="font-size:0.75rem;color:#cda260;text-decoration:none;padding:5px 12px;border:1px solid #cda26055;border-radius:6px;">📊 Dashboard</a>
+            <span style="font-size: 0.7rem; color: #666;">v2.0 Beta</span>
+        </div>
+    </div>
+    <div id="messages" class="messages">
+        <div class="message bot">Bienvenido al modo de depuración. Aquí podrás ver qué herramientas usa el bot en tiempo real.</div>
+    </div>
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="Escribe un comando o consulta..." onkeypress="if(event.key === 'Enter') sendMessage()">
+        <button id="sendBtn" onclick="sendMessage()">ENVIAR</button>
+    </div>
+</div>
+
+<div class="log-section">
+    <div class="log-header">🛡️ Trazas del Agente (Pensamiento y Herramientas)</div>
+    <div id="logs" class="log-content">
+        <div style="color: #555; text-align: center; margin-top: 20px;">Esperando actividad...</div>
+    </div>
+</div>
+
+<script>
+    const sessionId = 'debug-session-' + Math.random().toString(36).substring(7);
+    const messagesDiv = document.getElementById('messages');
+    const logsDiv = document.getElementById('logs');
+    const input = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    async function sendMessage() {
+        const text = input.value.trim();
+        if (!text) return;
+
+        appendMessage('user', text);
+        input.value = '';
+        input.disabled = true;
+        sendBtn.disabled = true;
+
+        const loadingId = 'loading-' + Date.now();
+        const loadingDiv = document.createElement('div');
+        loadingDiv.id = loadingId;
+        loadingDiv.className = 'message bot';
+        loadingDiv.innerHTML = '<span style="opacity:0.5">Procesando...</span>';
+        messagesDiv.appendChild(loadingDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+        try {
+            const response = await fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text, sessionId })
+            });
+            const data = await response.json();
+            
+            document.getElementById(loadingId).remove();
+            appendMessage('bot', data.response);
+            
+            if (data.steps && data.steps.length > 0) {
+                renderLogs(data.steps, text);
+            }
+        } catch (error) {
+            document.getElementById(loadingId).remove();
+            appendMessage('bot', '❌ Error de comunicación con el microservicio.');
+        } finally {
+            input.disabled = false;
+            sendBtn.disabled = false;
+            input.focus();
+        }
+    }
+
+    function appendMessage(sender, text) {
+        const div = document.createElement('div');
+        div.className = `message ${sender}`;
+        div.innerText = text;
+        messagesDiv.appendChild(div);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function renderLogs(steps, originalInput) {
+        if (logsDiv.children.length > 0 && logsDiv.innerHTML.includes('Esperando')) {
+            logsDiv.innerHTML = '';
+        }
+
+        const groupDiv = document.createElement('div');
+        groupDiv.style.borderBottom = '1px solid #222';
+        groupDiv.style.paddingBottom = '10px';
+        groupDiv.innerHTML = `<div style="color: #primary; font-size: 0.7rem; margin-bottom: 5px;">> ${originalInput}</div>`;
+
+        steps.forEach(step => {
+            const action = step.action;
+            const observation = step.observation;
+
+            const logItem = document.createElement('div');
+            logItem.className = 'log-item';
+            
+            logItem.innerHTML = `
+                <div><span class="log-tool">TOOL:</span> ${action.tool}</div>
+                <div class="log-args">ARGS: ${JSON.stringify(action.toolInput)}</div>
+                <div class="log-res">OBSERVATION: ${observation}</div>
+            `;
+            groupDiv.appendChild(logItem);
+        });
+
+        logsDiv.prepend(groupDiv);
+    }
+</script>
+
+</body>
+</html>

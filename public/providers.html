@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CholoBot — Proveedores IA</title>
+  <style>
+    :root {
+      --primary: #cda260; --bg: #0f0f0f; --card: #181818;
+      --text: #e0e0e0; --muted: #888; --border: #2a2a2a;
+      --ok: #4caf50; --error: #f44336; --warn: #ff9800; --blue: #61afef;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    nav { background: #111; border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 52px; position: sticky; top: 0; z-index: 100; }
+    .nav-brand { color: var(--primary); font-weight: 700; font-size: 0.95rem; letter-spacing: 1px; text-transform: uppercase; }
+    .nav-links { display: flex; gap: 4px; }
+    .nav-links a { color: var(--muted); text-decoration: none; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; transition: 0.15s; }
+    .nav-links a:hover, .nav-links a.active { background: var(--card); color: var(--text); }
+
+    .page { max-width: 960px; margin: 0 auto; padding: 32px 20px; }
+    .page-title { font-size: 1.3rem; font-weight: 700; color: var(--primary); margin-bottom: 6px; }
+    .page-sub { font-size: 0.82rem; color: var(--muted); margin-bottom: 28px; }
+
+    /* ACTIVE BANNER */
+    .active-banner {
+      background: #141414; border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px 22px; margin-bottom: 28px; display: flex; align-items: center; gap: 16px;
+    }
+    .active-banner.degraded { border-color: var(--error); background: #1a0a0a; }
+    .pulse { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .pulse.ok { background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: pulse 2s infinite; }
+    .pulse.err { background: var(--error); }
+    .pulse.unknown { background: var(--muted); }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(76,175,80,.4)} 50%{box-shadow:0 0 0 6px rgba(76,175,80,0)} }
+    .banner-info { flex: 1; }
+    .banner-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+    .banner-name { font-size: 1rem; font-weight: 700; }
+    .banner-model { font-size: 0.78rem; color: var(--muted); font-family: monospace; }
+    .banner-status { font-size: 0.78rem; margin-top: 2px; }
+    .banner-status.ok { color: var(--ok); }
+    .banner-status.err { color: var(--error); }
+    .banner-status.unknown { color: var(--muted); }
+    .banner-lat { font-size: 0.78rem; color: var(--muted); text-align: right; }
+
+    /* CARDS */
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
+
+    .pcard {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 20px; display: flex; flex-direction: column; gap: 14px; transition: border-color 0.2s;
+    }
+    .pcard.is-active { border-color: var(--primary); }
+    .pcard.is-ok { border-color: var(--ok); }
+    .pcard.is-error { border-color: var(--error); }
+
+    .card-head { display: flex; align-items: center; gap: 10px; }
+    .card-logo { font-size: 1.8rem; }
+    .card-meta { flex: 1; }
+    .card-name { font-size: 0.95rem; font-weight: 700; }
+    .card-id { font-size: 0.7rem; color: var(--muted); font-family: monospace; }
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 20px; font-size: 0.7rem; font-weight: 600;
+    }
+    .pill-ok     { background: #1a2e1a; color: var(--ok); }
+    .pill-error  { background: #2e1a1a; color: var(--error); }
+    .pill-warn   { background: #2e2000; color: var(--warn); }
+    .pill-unknown{ background: #1e1e1e; color: var(--muted); }
+    .pill-quota  { background: #2e1800; color: #ff6b2b; }
+    .pill-auth   { background: #2a0a2a; color: #cf6bff; }
+    .pill-live   { background: #1a1a00; color: #cccc00; font-style: italic; }
+
+    /* KEY INPUT */
+    .key-section { display: flex; flex-direction: column; gap: 6px; }
+    .key-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+    .key-row { display: flex; gap: 6px; }
+    .key-input {
+      flex: 1; background: #111; border: 1px solid var(--border); color: var(--text);
+      padding: 7px 10px; border-radius: 7px; font-size: 0.78rem; font-family: monospace;
+      outline: none; transition: border-color 0.2s;
+    }
+    .key-input:focus { border-color: var(--primary); }
+    .key-input.saved { border-color: #333; color: var(--muted); }
+    .btn-save { padding: 7px 12px; background: #252525; border: 1px solid var(--border); color: var(--text); border-radius: 7px; font-size: 0.78rem; cursor: pointer; transition: 0.15s; white-space: nowrap; }
+    .btn-save:hover { background: #303030; }
+    .btn-save.saving { opacity: 0.5; }
+
+    /* MODEL */
+    .model-select {
+      width: 100%; background: #111; border: 1px solid var(--border); color: var(--text);
+      padding: 7px 10px; border-radius: 7px; font-size: 0.8rem; font-family: monospace; cursor: pointer; outline: none;
+    }
+    .model-select:focus { border-color: var(--primary); }
+    .custom-input {
+      width: 100%; background: #111; border: 1px solid var(--border); color: var(--text);
+      padding: 7px 10px; border-radius: 7px; font-size: 0.78rem; font-family: monospace; outline: none; display: none;
+    }
+    .custom-input:focus { border-color: var(--primary); }
+
+    /* ACTIONS */
+    .card-actions { display: flex; gap: 8px; }
+    .btn { flex: 1; padding: 9px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; border: none; transition: 0.15s; text-align: center; }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn-test { background: #1e1e1e; color: var(--muted); border: 1px solid var(--border); }
+    .btn-test:hover:not(:disabled) { background: #252525; color: var(--text); }
+    .btn-activate { background: var(--primary); color: #000; }
+    .btn-activate:hover:not(:disabled) { background: #e0b570; }
+    .btn-activate.active-now { background: #1a2e1a; color: var(--ok); cursor: default; pointer-events: none; }
+
+    /* TEST RESULT */
+    .test-result { font-size: 0.72rem; font-family: monospace; padding: 7px 10px; border-radius: 7px; min-height: 32px; display: flex; align-items: center; gap: 6px; }
+    .tr-idle    { background: #111; color: #444; border: 1px solid #1a1a1a; }
+    .tr-testing { background: #1e1a00; color: var(--warn); border: 1px solid #3a3000; }
+    .tr-ok      { background: #0e1e0e; color: var(--ok); border: 1px solid #1a3a1a; }
+    .tr-err     { background: #1e0e0e; color: var(--error); border: 1px solid #3a1010; }
+
+    /* TOAST */
+    .toast { position: fixed; bottom: 24px; right: 24px; background: #1e1e1e; border: 1px solid var(--border); border-radius: 10px; padding: 12px 18px; font-size: 0.82rem; transform: translateY(80px); opacity: 0; transition: 0.3s; z-index: 999; }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.ok  { border-color: var(--ok); color: var(--ok); }
+    .toast.err { border-color: var(--error); color: var(--error); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="nav-brand">💈 CholoBot</span>
+  <div class="nav-links">
+    <a href="/dashboard.html">Dashboard</a>
+    <a href="/index.html">Debug Chat</a>
+    <a href="/providers.html" class="active">Proveedores IA</a>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-title">⚡ Proveedores de IA</div>
+  <div class="page-sub">Administra las API keys y cambia el modelo activo. El cambio aplica desde el siguiente mensaje sin reiniciar.</div>
+
+  <div class="active-banner" id="activeBanner">
+    <div class="pulse unknown" id="activePulse"></div>
+    <div class="banner-info">
+      <div class="banner-label">Proveedor activo</div>
+      <div class="banner-name" id="activeName">—</div>
+      <div class="banner-model" id="activeModel">—</div>
+      <div class="banner-status unknown" id="activeStatusTxt">Sin probar</div>
+    </div>
+    <div class="banner-lat" id="activeLat"></div>
+  </div>
+
+  <div class="cards" id="cards">
+    <div style="color:var(--muted);font-size:0.82rem;padding:8px">Cargando...</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const PROVIDERS = [
+  { id:'openai',    logo:'🤖', name:'OpenAI GPT',       models:['gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo'] },
+  { id:'anthropic', logo:'🧠', name:'Anthropic Claude',  models:['claude-opus-4-5','claude-sonnet-4-5','claude-haiku-4-5-20251001','claude-3-5-sonnet-20241022','claude-3-5-haiku-20241022'] },
+  { id:'google',    logo:'✨', name:'Google Gemini',     models:['gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-pro','gemini-1.5-flash'] },
+];
+
+let config = null;
+let statuses = {};
+
+async function load() {
+  const res = await fetch('/api/config/provider');
+  const data = await res.json();
+  config = data.config;
+  statuses = data.statuses || {};
+  render();
+}
+
+function render() {
+  renderBanner();
+  renderCards();
+}
+
+function renderBanner() {
+  const p = PROVIDERS.find(x => x.id === config.active);
+  const st = statuses[config.active] || {};
+  const pulse = document.getElementById('activePulse');
+  const banner = document.getElementById('activeBanner');
+  const statusTxt = document.getElementById('activeStatusTxt');
+  const lat = document.getElementById('activeLat');
+
+  document.getElementById('activeName').textContent = p?.name ?? config.active;
+  document.getElementById('activeModel').textContent = config.models[config.active];
+
+  if (st.ok === true) {
+    pulse.className = 'pulse ok';
+    banner.className = 'active-banner';
+    statusTxt.className = 'banner-status ok';
+    statusTxt.textContent = '✓ Operativo';
+    lat.textContent = st.latencyMs ? `${st.latencyMs}ms` : '';
+  } else if (st.ok === false) {
+    pulse.className = 'pulse err';
+    banner.className = 'active-banner degraded';
+    statusTxt.className = 'banner-status err';
+    statusTxt.textContent = `✗ ${st.error?.substring(0,60) ?? 'Error de conexión'}`;
+    lat.textContent = '';
+  } else {
+    pulse.className = 'pulse unknown';
+    banner.className = 'active-banner';
+    statusTxt.className = 'banner-status unknown';
+    statusTxt.textContent = 'Sin probar — haz clic en Probar';
+    lat.textContent = '';
+  }
+}
+
+function renderCards() {
+  document.getElementById('cards').innerHTML = PROVIDERS.map(p => {
+    const st = statuses[p.id] || {};
+    const isActive = config.active === p.id;
+    const model = config.models[p.id];
+
+    let cardClass = 'pcard';
+    if (isActive && st.ok === true)  cardClass += ' is-ok';
+    else if (isActive && st.ok === false) cardClass += ' is-error';
+    else if (isActive) cardClass += ' is-active';
+
+    let pillHtml;
+    if (!st.configured) {
+      pillHtml = `<span class="status-pill pill-warn">⚠ Sin key</span>`;
+    } else if (st.ok === true) {
+      pillHtml = `<span class="status-pill pill-ok">✓ Operativo</span>`;
+    } else if (st.ok === false) {
+      if (st.errorType === 'quota') {
+        pillHtml = `<span class="status-pill pill-quota">⚡ Sin saldo</span>`;
+      } else if (st.errorType === 'auth') {
+        pillHtml = `<span class="status-pill pill-auth">🔑 Key inválida</span>`;
+      } else {
+        pillHtml = `<span class="status-pill pill-error">✗ Error</span>`;
+      }
+      if (st.source === 'live') {
+        pillHtml += ` <span class="status-pill pill-live">en uso</span>`;
+      }
+    } else {
+      pillHtml = `<span class="status-pill pill-unknown">● Sin probar</span>`;
+    }
+
+    const keyPlaceholder = st.maskedKey ? st.maskedKey : 'Pega tu API key aquí';
+    const keyClass = st.maskedKey ? 'key-input saved' : 'key-input';
+
+    const modelOptions = p.models.map(m =>
+      `<option value="${m}" ${m === model ? 'selected':''}>${m}</option>`
+    ).join('') + `<option value="__custom__">Otro modelo...</option>`;
+
+    const activeBtnClass = isActive ? 'btn btn-activate active-now' : 'btn btn-activate';
+    const activeBtnTxt  = isActive ? '✓ Activo' : 'Activar';
+    const activeBtnDis  = isActive || !st.configured ? 'disabled' : '';  // solo necesita key configurada
+
+    const trId = `tr-${p.id}`;
+    const testedAgo = st.testedAt ? relAgo(st.testedAt) : '';
+    let trClass = 'test-result tr-idle', trTxt = '— sin probar';
+    if (st.ok === true)  { trClass='test-result tr-ok';  trTxt=`✓ Conexión OK · ${st.latencyMs}ms${testedAgo?' · '+testedAgo:''}`; }
+    if (st.ok === false) {
+      trClass='test-result tr-err';
+      const tag = st.errorType === 'quota' ? '[SIN SALDO] ' : st.errorType === 'auth' ? '[KEY INVÁLIDA] ' : '';
+      const src = st.source === 'live' ? ' (detectado en conversación)' : '';
+      trTxt=`✗ ${tag}${st.error?.substring(0,70)}${src}`;
+    }
+
+    return `
+    <div class="${cardClass}" id="card-${p.id}">
+      <div class="card-head">
+        <span class="card-logo">${p.logo}</span>
+        <div class="card-meta">
+          <div class="card-name">${p.name}</div>
+          <div class="card-id">${p.id}</div>
+        </div>
+        ${pillHtml}
+      </div>
+
+      <div class="key-section">
+        <div class="key-label">API Key</div>
+        <div class="key-row">
+          <input type="password" id="key-${p.id}" class="${keyClass}"
+            placeholder="${keyPlaceholder}"
+            autocomplete="off">
+          <button class="btn-save" onclick="saveKey('${p.id}')">Guardar</button>
+        </div>
+      </div>
+
+      <div>
+        <select class="model-select" id="model-${p.id}" onchange="onModelChange('${p.id}')">
+          ${modelOptions}
+        </select>
+        <input type="text" id="custom-${p.id}" class="custom-input" placeholder="Escribe el nombre del modelo">
+      </div>
+
+      <div class="card-actions">
+        <button class="btn btn-test" onclick="testProvider('${p.id}')" ${!st.configured?'disabled':''} id="testbtn-${p.id}">
+          Probar
+        </button>
+        <button class="${activeBtnClass}" onclick="activate('${p.id}')" ${activeBtnDis} id="actbtn-${p.id}">
+          ${activeBtnTxt}
+        </button>
+      </div>
+
+      <div class="${trClass}" id="${trId}">${trTxt}</div>
+    </div>`;
+  }).join('');
+}
+
+function onModelChange(pid) {
+  const sel = document.getElementById(`model-${pid}`);
+  const custom = document.getElementById(`custom-${pid}`);
+  custom.style.display = sel.value === '__custom__' ? 'block' : 'none';
+  if (sel.value === '__custom__') custom.focus();
+}
+
+function getModel(pid) {
+  const sel = document.getElementById(`model-${pid}`);
+  if (sel.value === '__custom__') return document.getElementById(`custom-${pid}`).value.trim() || null;
+  return sel.value;
+}
+
+async function saveKey(pid) {
+  const input = document.getElementById(`key-${pid}`);
+  const key = input.value.trim();
+  if (!key || key.includes('•')) { toast('Escribe una API key nueva', 'err'); return; }
+
+  const btn = input.nextElementSibling;
+  btn.textContent = '...'; btn.classList.add('saving');
+
+  const res = await fetch('/api/config/provider/key', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider: pid, key }),
+  });
+  const data = await res.json();
+  btn.textContent = 'Guardar'; btn.classList.remove('saving');
+
+  if (data.ok) {
+    toast(`✓ API key de ${pid} guardada`, 'ok');
+    input.value = data.masked;
+    input.classList.add('saved');
+    input.type = 'password';
+    await load();
+  } else {
+    toast(`Error: ${data.error}`, 'err');
+  }
+}
+
+async function testProvider(pid) {
+  const model = getModel(pid);
+  const tr = document.getElementById(`tr-${pid}`);
+  const btn = document.getElementById(`testbtn-${pid}`);
+
+  tr.className = 'test-result tr-testing';
+  tr.textContent = '⏳ Probando conexión...';
+  btn.disabled = true;
+
+  const res = await fetch('/api/config/provider/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider: pid, model }),
+  });
+  const data = await res.json();
+  btn.disabled = false;
+
+  if (data.ok) {
+    tr.className = 'test-result tr-ok';
+    tr.textContent = `✓ Conexión OK · ${data.latencyMs}ms`;
+  } else {
+    tr.className = 'test-result tr-err';
+    tr.textContent = `✗ ${data.error?.substring(0, 80)}`;
+  }
+
+  // Recargar para actualizar banner y pills
+  await load();
+}
+
+async function activate(pid) {
+  const model = getModel(pid);
+  if (!model) { toast('Selecciona un modelo', 'err'); return; }
+
+  const res = await fetch('/api/config/provider', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider: pid, model }),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    toast(`✓ Agente cambiado a ${pid} / ${model}`, 'ok');
+    await load();
+  } else {
+    toast(`Error: ${data.error}`, 'err');
+  }
+}
+
+function relAgo(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return 'hace ' + s + 's';
+  if (s < 3600) return 'hace ' + Math.floor(s/60) + 'min';
+  return 'hace ' + Math.floor(s/3600) + 'h';
+}
+
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = `toast ${type} show`;
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+load();
+
+function scheduleRefresh() {
+  const hasError = config && Object.values(statuses).some(s => s.ok === false);
+  setTimeout(async () => { await load(); scheduleRefresh(); }, hasError ? 5000 : 15000);
+}
+scheduleRefresh();
+</script>
+</body>
+</html>
