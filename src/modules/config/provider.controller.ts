@@ -28,8 +28,12 @@ export class ProviderController {
       res.status(400).json({ ok: false, error: 'Proveedor o key inválidos' });
       return;
     }
-    await ProviderService.saveApiKey(provider as ProviderName, key.trim());
-    res.json({ ok: true, masked: ProviderService.mask(key.trim()) });
+    try {
+      await ProviderService.saveApiKey(provider as ProviderName, key.trim());
+      res.json({ ok: true, masked: ProviderService.mask(key.trim()) });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: 'No se pudo guardar la key: ' + (err?.message ?? 'Redis no disponible') });
+    }
   }
 
   static async testProvider(req: Request, res: Response) {
@@ -38,7 +42,11 @@ export class ProviderController {
       res.status(400).json({ ok: false, error: 'Proveedor inválido' });
       return;
     }
-    const result = await ProviderService.testProvider(provider as ProviderName, model);
-    res.json(result);
+    try {
+      const result = await ProviderService.testProvider(provider as ProviderName, model);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: 'Error al probar proveedor: ' + (err?.message ?? 'desconocido') });
+    }
   }
 }

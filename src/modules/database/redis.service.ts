@@ -26,7 +26,10 @@ export class RedisService {
           del: async (key: string) => { delete store[key]; delete timers[key]; }
         } as unknown as Redis;
       } else {
-        this.instance = new Redis(envConfig.REDIS_URL!);
+        if (!envConfig.REDIS_URL) {
+          logger.warn('REDIS_URL no configurado — usando redis://localhost:6379 por defecto');
+        }
+        this.instance = new Redis(envConfig.REDIS_URL || 'redis://localhost:6379');
         this.instance.on('connect', () => logger.info('Redis conectado'));
         this.instance.on('error', (err) => logger.error({ err }, 'Redis error'));
       }

@@ -487,7 +487,50 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Auth modal: aparece cuando el servidor requiere DASHBOARD_TOKEN -->
+<div id="auth-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:28px 24px;width:340px;display:flex;flex-direction:column;gap:14px;">
+    <div style="font-weight:700;font-size:1rem;color:var(--primary)">🔑 Token de acceso requerido</div>
+    <div style="font-size:0.78rem;color:var(--muted);line-height:1.5">Este dashboard está protegido. Ingresa el valor de <code style="background:var(--bg2);padding:1px 4px;border-radius:3px">DASHBOARD_TOKEN</code> configurado en el servidor.</div>
+    <input id="auth-token-input" type="password" placeholder="Token de acceso..." autocomplete="off"
+      style="padding:9px 11px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem;outline:none;width:100%"
+      onkeydown="if(event.key==='Enter')saveAuthToken()">
+    <button onclick="saveAuthToken()" style="padding:9px;background:var(--primary);color:#000;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:0.85rem">Guardar y continuar</button>
+  </div>
+</div>
+
 <script>
+/* ════════════════════════════════════════════════════════════════════════════
+   AUTH TOKEN
+════════════════════════════════════════════════════════════════════════════ */
+let dashboardToken = (() => {
+  const fromUrl = new URLSearchParams(location.search).get('token');
+  if (fromUrl) { localStorage.setItem('cholobot_token', fromUrl); return fromUrl; }
+  return localStorage.getItem('cholobot_token') || '';
+})();
+
+async function apiFetch(url, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (dashboardToken) headers['Authorization'] = 'Bearer ' + dashboardToken;
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401) {
+    document.getElementById('auth-modal').style.display = 'flex';
+    throw new Error('Token requerido');
+  }
+  return res;
+}
+
+function saveAuthToken() {
+  const val = document.getElementById('auth-token-input').value.trim();
+  if (!val) return;
+  dashboardToken = val;
+  localStorage.setItem('cholobot_token', val);
+  document.getElementById('auth-modal').style.display = 'none';
+  toast('Token guardado ✓', 'ok');
+  if (currentView === 'monitor') monitorRefresh();
+  else if (currentView === 'providers') provLoad();
+}
+
 /* ════════════════════════════════════════════════════════════════════════════
    NAVIGATION
 ════════════════════════════════════════════════════════════════════════════ */
@@ -552,7 +595,7 @@ async function monitorRefresh() {
       fetch('/api/metrics/stats'),
       fetch('/api/metrics/conversations'),
       fetch('/api/health'),
-      fetch('/api/config/provider'),
+      apiFetch('/api/config/provider'),
     ]);
     const stats  = await statsRes.json();
     const convs  = await convsRes.json();
@@ -823,7 +866,7 @@ let provStatuses = {};
 let provRefreshTimeout = null;
 
 async function provLoad() {
-  const res = await fetch('/api/config/provider');
+  const res = await apiFetch('/api/config/provider');
   const data = await res.json();
   provConfig   = data.config;
   provStatuses = data.statuses || {};
@@ -957,11 +1000,16 @@ async function provSaveKey(pid) {
   if (!key || key.includes('•')) { toast('Escribe una API key nueva', 'err'); return; }
   const btn = input.nextElementSibling;
   btn.textContent = '...'; btn.classList.add('saving');
-  const res = await fetch('/api/config/provider/key', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ provider:pid, key }) });
-  const data = await res.json();
-  btn.textContent = 'Guardar'; btn.classList.remove('saving');
-  if (data.ok) { toast(`✓ Key de ${pid} guardada`, 'ok'); input.value = data.masked; input.classList.add('saved'); await provLoad(); }
-  else toast(`Error: ${data.error}`, 'err');
+  try {
+    const res = await apiFetch('/api/config/provider/key', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ provider:pid, key }) });
+    const data = await res.json();
+    if (data.ok) { toast(`✓ Key de ${pid} guardada`, 'ok'); input.value = data.masked; input.classList.add('saved'); await provLoad(); }
+    else toast(`Error: ${data.error}`, 'err');
+  } catch (e) {
+    if (e.message !== 'Token requerido') toast(`Error: ${e.message}`, 'err');
+  } finally {
+    btn.textContent = 'Guardar'; btn.classList.remove('saving');
+  }
 }
 
 async function provTest(pid) {
@@ -970,21 +1018,30 @@ async function provTest(pid) {
   const btn   = document.getElementById(`ptestbtn-${pid}`);
   tr.className = 'test-result tr-testing'; tr.textContent = '⏳ Probando...';
   btn.disabled = true;
-  const res = await fetch('/api/config/provider/test', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ provider:pid, model }) });
-  const data = await res.json();
-  btn.disabled = false;
-  if (data.ok) { tr.className = 'test-result tr-ok'; tr.textContent = `✓ OK · ${data.latencyMs}ms`; }
-  else { tr.className = 'test-result tr-err'; tr.textContent = `✗ ${data.error?.substring(0,80)}`; }
-  await provLoad();
+  try {
+    const res = await apiFetch('/api/config/provider/test', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ provider:pid, model }) });
+    const data = await res.json();
+    if (data.ok) { tr.className = 'test-result tr-ok'; tr.textContent = `✓ OK · ${data.latencyMs}ms`; }
+    else { tr.className = 'test-result tr-err'; tr.textContent = `✗ ${data.error?.substring(0,80)}`; }
+    await provLoad();
+  } catch (e) {
+    if (e.message !== 'Token requerido') { tr.className = 'test-result tr-err'; tr.textContent = `✗ ${e.message}`; }
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function provActivate(pid) {
   const model = getProvModel(pid);
   if (!model) { toast('Selecciona un modelo', 'err'); return; }
-  const res  = await fetch('/api/config/provider', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ provider:pid, model }) });
-  const data = await res.json();
-  if (data.ok) { toast(`✓ Agente cambiado a ${pid} · ${model}`, 'ok'); await provLoad(); }
-  else toast(`Error: ${data.error}`, 'err');
+  try {
+    const res  = await apiFetch('/api/config/provider', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ provider:pid, model }) });
+    const data = await res.json();
+    if (data.ok) { toast(`✓ Agente cambiado a ${pid} · ${model}`, 'ok'); await provLoad(); }
+    else toast(`Error: ${data.error}`, 'err');
+  } catch (e) {
+    if (e.message !== 'Token requerido') toast(`Error: ${e.message}`, 'err');
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
