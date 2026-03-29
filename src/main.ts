@@ -25,7 +25,7 @@ app.use(express.json({ limit: '1mb' }));
 
 // Auth middleware — activo solo si DASHBOARD_TOKEN está definido en el env
 function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const token = envConfig.DASHBOARD_TOKEN;
+  const token = envConfig.ADMIN_TOKEN;
   if (!token) return next(); // Sin token configurado = modo desarrollo, sin restricción
 
   // Soporte para Bearer token en header o ?token= en query string

@@ -17,8 +17,7 @@ const envSchema = z.object({
   GOOGLE_API_KEY: z.string().optional(),
   MOCK_MODE: z.string().optional().default('false').transform(v => v === 'true'),
   AGENT_TIMEOUT_MS: z.string().optional().default('45000').transform(Number),
-  DASHBOARD_TOKEN: z.string().optional(),
-  SAAS_API_TOKEN: z.string().optional(), // Bearer token for /api/agents/* routes called by the SaaS panel
+  ADMIN_TOKEN: z.string().optional(), // Token para todas las rutas administrativas protegidas
 });
 
 type EnvConfig = z.infer<typeof envSchema>;

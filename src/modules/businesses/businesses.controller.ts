@@ -6,7 +6,7 @@ import { logger } from '../../config/logger';
 
 /** Bearer-token auth middleware for the /api/agents/* routes */
 export function requireSaasAuth(req: Request, res: Response, next: () => void): void {
-  const token = envConfig.SAAS_API_TOKEN;
+  const token = envConfig.ADMIN_TOKEN;
   if (!token) { next(); return; } // no token configured → dev mode, open
 
   const authHeader = req.headers.authorization;
@@ -19,16 +19,22 @@ export class BusinessesController {
 
   /** GET /api/agents — list all sucursales with agent config */
   public static async list(_req: Request, res: Response): Promise<void> {
-    const { data, error } = await supabase
-      .from('sucursales')
-      .select('id, nombre, slug, plan, telefono_whatsapp, timezone, activa, agent_name, agent_personality, agent_greeting, agent_custom_prompt, evolution_instance, evolution_url, llm_provider, llm_model, agent_active, created_at')
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('sucursales')
+        .select('id, nombre, slug, plan, telefono_whatsapp, timezone, agent_name, agent_personality, agent_greeting, agent_custom_prompt, evolution_instance, evolution_url, llm_provider, llm_model, agent_active, created_at')
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      res.status(500).json({ error: error.message });
-      return;
+      if (error) {
+        logger.error({ err: error.message }, 'Supabase list sucursales failed');
+        res.status(500).json({ error: error.message });
+        return;
+      }
+      res.json({ data });
+    } catch (e: any) {
+      logger.error({ err: e.message }, 'BusinessesController.list crash');
+      res.status(500).json({ error: 'Internal Server Error' });
     }
-    res.json({ data });
   }
 
   /** PATCH /api/agents/:id — update agent config + invalidate Redis cache */
