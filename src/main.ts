@@ -11,6 +11,7 @@ import { MetricsService } from './modules/metrics/metrics.service';
 import { HealthService } from './modules/metrics/health.service';
 import { ProviderController } from './modules/config/provider.controller';
 import { ProviderService } from './modules/config/provider.service';
+import { DevController } from './modules/dev/dev.controller';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -89,6 +90,12 @@ app.get('/api/config/provider', requireAuth, ProviderController.getConfig);
 app.post('/api/config/provider', requireAuth, ProviderController.setActive);
 app.post('/api/config/provider/key', requireAuth, ProviderController.saveKey);
 app.post('/api/config/provider/test', requireAuth, ProviderController.testProvider);
+
+// Dev / SaaS panel
+app.get('/api/dev/negocios',              requireAuth, DevController.listNegocios);
+app.post('/api/dev/negocios',             requireAuth, DevController.createNegocio);
+app.patch('/api/dev/negocios/:id',        requireAuth, DevController.updateNegocio);
+app.post('/api/dev/negocios/:id/toggle',  requireAuth, DevController.toggleNegocio);
 app.get('/dashboard', (_req, res) => res.redirect('/'));
 app.get('/providers', (_req, res) => res.redirect('/'));
 app.get('/chat', (_req, res) => res.redirect('/'));
