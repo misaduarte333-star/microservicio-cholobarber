@@ -42,8 +42,5 @@
   },
   "devDependencies": {
     "@types/cors": "^2.8.19"
-  },
-  "overrides": {
-    "glob": "^11.0.0"
   }
 }
