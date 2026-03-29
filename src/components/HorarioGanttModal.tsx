@@ -9,6 +9,9 @@ const styles = `
 }
 `
 
+/**
+ * Propiedades para el modal del diagrama de Gantt
+ */
 interface HorarioGanttModalProps {
     isOpen: boolean
     onClose: () => void
@@ -16,6 +19,10 @@ interface HorarioGanttModalProps {
     sucursal?: Partial<Sucursal> | null
 }
 
+/**
+ * Componente Modal que muestra un cronograma (Diagrama de Gantt) de la disponibilidad
+ * y turnos de los barberos en contraste con el horario de apertura de la sucursal.
+ */
 export function HorarioGanttModal({ isOpen, onClose, barberos, sucursal }: HorarioGanttModalProps) {
     const [selectedDay, setSelectedDay] = useState<DiasSemana>('lunes')
 
@@ -37,7 +44,10 @@ export function HorarioGanttModal({ isOpen, onClose, barberos, sucursal }: Horar
 
 
 
-    // Helper to check if a specific time is within a range string "HH:MM"-"HH:MM"
+    /**
+     * Verifica si una hora específica (representada por un número entero) cae dentro 
+     * del rango de horas (inicio-fin o apertura-cierre).
+     */
     const isWithinTime = (time: number, rangeStr?: { inicio: string, fin: string } | { apertura: string, cierre: string } | null) => {
         if (!rangeStr) return false
 
@@ -72,29 +82,29 @@ export function HorarioGanttModal({ isOpen, onClose, barberos, sucursal }: Horar
     return createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
             <style>{styles}</style>
-            <div className="bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 w-full max-w-6xl max-h-[90vh] flex flex-col">
+            <div className="bg-background rounded-2xl shadow-2xl border border-border-muted w-full max-w-6xl max-h-[90vh] flex flex-col">
                 {/* Header */}
-                <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+                <div className="p-6 border-b border-border-muted flex items-center justify-between">
                     <div>
-                        <h2 className="text-2xl font-bold text-white">Horarios del Equipo</h2>
-                        <p className="text-slate-400">Visualización de disponibilidad vs Horario Sucursal</p>
+                        <h2 className="text-2xl font-bold text-foreground">Horarios del Equipo</h2>
+                        <p className="text-muted-foreground">Visualización de disponibilidad vs Horario Sucursal</p>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
-                        <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button onClick={onClose} className="p-2 hover:bg-surface rounded-lg transition-colors">
+                        <svg className="w-6 h-6 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
                 </div>
 
                 {/* Day Selector */}
-                <div className="flex border-b border-slate-800 overflow-x-auto">
+                <div className="flex border-b border-border-muted overflow-x-auto">
                     {dias.map((dia) => (
                         <button
                             key={dia}
                             onClick={() => setSelectedDay(dia)}
                             className={`px-6 py-3 text-sm font-medium transition-colors whitespace-nowrap ${selectedDay === dia
                                     ? 'bg-blue-600/10 text-blue-400 border-b-2 border-blue-500'
-                                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-surface'
                                 }`}
                         >
                             {dia.charAt(0).toUpperCase() + dia.slice(1)}
@@ -107,11 +117,11 @@ export function HorarioGanttModal({ isOpen, onClose, barberos, sucursal }: Horar
                     <div className="min-w-[800px]">
                         {/* Timeline Header */}
                         <div className="grid grid-cols-[200px_1fr] mb-4">
-                            <div className="text-slate-500 text-xs uppercase font-bold tracking-wider pt-2">Recurso / Hora</div>
+                            <div className="text-muted-foreground/70 text-xs uppercase font-bold tracking-wider pt-2">Recurso / Hora</div>
                             <div className="grid" style={{ gridTemplateColumns: `repeat(${hours.length}, 1fr)` }}>
                                 {hours.map(hour => (
                                     <div key={hour} className="text-center">
-                                        <span className="text-xs text-slate-500">{hour}:00</span>
+                                        <span className="text-xs text-muted-foreground/70">{hour}:00</span>
                                     </div>
                                 ))}
                             </div>
@@ -120,20 +130,20 @@ export function HorarioGanttModal({ isOpen, onClose, barberos, sucursal }: Horar
                         {/* Sucursal Row (Master) */}
                         <div className="grid grid-cols-[200px_1fr] mb-6 group">
                             <div className="flex items-center gap-3 py-3 pr-4">
-                                <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
-                                    <svg className="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div className="w-8 h-8 rounded-full bg-surface-hover flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                                     </svg>
                                 </div>
                                 <div>
-                                    <p className="font-medium text-white text-sm">Sucursal</p>
-                                    <p className="text-[10px] text-slate-500">Horario Apertura</p>
+                                    <p className="font-medium text-foreground text-sm">Sucursal</p>
+                                    <p className="text-[10px] text-muted-foreground/70">Horario Apertura</p>
                                 </div>
                             </div>
                             <div className="grid relative" style={{ gridTemplateColumns: `repeat(${hours.length}, 1fr)` }}>
                                 {/* Background Grid Lines */}
                                 {hours.map((_, i) => (
-                                    <div key={i} className="border-l border-slate-800 h-full absolute top-0 bottom-0" style={{ left: `${(i / hours.length) * 100}%` }} />
+                                    <div key={i} className="border-l border-border-muted h-full absolute top-0 bottom-0" style={{ left: `${(i / hours.length) * 100}%` }} />
                                 ))}
 
                                 {hours.map(hour => {
@@ -149,7 +159,7 @@ export function HorarioGanttModal({ isOpen, onClose, barberos, sucursal }: Horar
                             </div>
                         </div>
 
-                        <div className="h-px bg-slate-800 mb-6" />
+                        <div className="h-px bg-surface mb-6" />
 
                         {/* Barbers Rows */}
                         <div className="space-y-4">
@@ -157,14 +167,14 @@ export function HorarioGanttModal({ isOpen, onClose, barberos, sucursal }: Horar
                                 const workSchedule = barbero.horario_laboral[selectedDay]
 
                                 return (
-                                    <div key={barbero.id} className="grid grid-cols-[200px_1fr] group hover:bg-slate-800/20 rounded-lg transition-colors">
+                                    <div key={barbero.id} className="grid grid-cols-[200px_1fr] group hover:bg-surface/ rounded-lg transition-colors">
                                         <div className="flex items-center gap-3 py-2 pr-4 pl-2">
-                                            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold text-white">
+                                            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold text-foreground">
                                                 {barbero.nombre.charAt(0)}
                                             </div>
                                             <div>
                                                 <p className="font-medium text-slate-200 text-sm">{barbero.nombre}</p>
-                                                <p className="text-[10px] text-slate-500">Estación {barbero.estacion_id}</p>
+                                                <p className="text-[10px] text-muted-foreground/70">Estación {barbero.estacion_id}</p>
                                             </div>
                                         </div>
 
@@ -217,7 +227,7 @@ export function HorarioGanttModal({ isOpen, onClose, barberos, sucursal }: Horar
                 </div>
 
                 {/* Legend */}
-                <div className="p-4 border-t border-slate-800 flex gap-6 text-xs text-slate-400">
+                <div className="p-4 border-t border-border-muted flex gap-6 text-xs text-muted-foreground">
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 bg-slate-600 rounded-full opacity-50"></div>
                         <span>Horario Sucursal</span>

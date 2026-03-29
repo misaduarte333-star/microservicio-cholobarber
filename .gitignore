@@ -25,11 +25,23 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # Env files
+.env
 .env*.local
 
-# Vercel
-.vercel
-
-# TypeScript
-*.tsbuildinfo
-next-env.d.ts
+# Logs and temporary files
+*.log
+git_status.txt
+tmp_*
+db_check_result.json
+db_test_output.txt
+knip-report*
+out.log
+tsc-report*
+errors.txt
+errors*.log
+ts_errors*.log
+activate_admins.js
+fix_hashes.js
+setup_test_data.js
+test-connection.js
+scripts/*.mjs

@@ -3,7 +3,11 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import type { CitaConRelaciones, EstadoCita } from '@/lib/types'
+import { APP_TIMEZONE } from '@/lib/timezone'
 
+/**
+ * Propiedades del componente CitaCard
+ */
 interface CitaCardProps {
     cita: CitaConRelaciones
     onUpdate?: () => void
@@ -11,15 +15,21 @@ interface CitaCardProps {
     style?: React.CSSProperties
 }
 
+/**
+ * Tarjeta individual para mostrar la información de una cita (cliente, servicio, horario).
+ * Permite cambiar el estado de la cita (ej. Confirmar, Iniciar, Finalizar).
+ */
 export function CitaCard({ cita, onUpdate, isHighlighted, style }: CitaCardProps) {
     const [loading, setLoading] = useState(false)
-    const supabase = createClient()
+    const [supabase] = useState(() => createClient())
 
+    /**
+     * Actualiza el estado de la cita en Supabase y ejecuta el callback onUpdate
+     */
     const actualizarEstado = async (nuevoEstado: EstadoCita) => {
         setLoading(true)
         try {
-            const { error } = await supabase
-                .from('citas')
+            const { error } = await (supabase.from('citas') as any)
                 .update({
                     estado: nuevoEstado,
                     updated_at: new Date().toISOString()
@@ -89,11 +99,13 @@ export function CitaCard({ cita, onUpdate, isHighlighted, style }: CitaCardProps
     const config = getStatusConfig()
     const horaInicio = new Date(cita.timestamp_inicio).toLocaleTimeString('es-MX', {
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        timeZone: APP_TIMEZONE
     })
     const horaFin = new Date(cita.timestamp_fin).toLocaleTimeString('es-MX', {
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        timeZone: APP_TIMEZONE
     })
 
     return (
@@ -118,7 +130,7 @@ export function CitaCard({ cita, onUpdate, isHighlighted, style }: CitaCardProps
                         </div>
 
                         <div className="min-w-0">
-                            <h3 className="text-xl font-bold text-white truncate">
+                            <h3 className="text-xl font-bold text-foreground truncate">
                                 {cita.cliente_nombre}
                             </h3>
                             <div className="flex items-center gap-2 text-white/80">

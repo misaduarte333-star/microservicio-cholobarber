@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import type { Servicio, Barbero, HorarioApertura, HorarioLaboralSemana } from '@/lib/types'
+import type { Servicio, Barbero } from '@/lib/types'
+import { APP_TIMEZONE, todayInTZ } from '@/lib/timezone'
 
 export default function BookingPage() {
     // State for Wizard Steps
@@ -22,8 +23,22 @@ export default function BookingPage() {
     const [clientPhone, setClientPhone] = useState('')
     const [clientNote, setClientNote] = useState('')
 
-    const supabase = createClient()
-    const SUCURSAL_ID = '1' // Todo: dynamic
+    const [supabase] = useState(() => createClient())
+
+    // Dynamic sucursal from URL query param: /citas?s=uuid
+    const [sucursalId, setSucursalId] = useState<string>('')
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search)
+        const s = params.get('s')
+        if (s) {
+            setSucursalId(s)
+        } else {
+            // Fallback: fetch first active sucursal
+            ;(supabase.from('sucursales') as any).select('id').eq('activa', true).limit(1).single()
+                .then(({ data }: { data: { id: string } | null }) => { if (data) setSucursalId(data.id) })
+        }
+    }, [supabase])
 
     useEffect(() => {
         loadInitialData()
@@ -80,13 +95,13 @@ export default function BookingPage() {
         setLoading(true)
         try {
             const appointmentData = {
-                sucursal_id: SUCURSAL_ID,
+                sucursal_id: sucursalId,
                 barbero_id: selectedBarber?.id || barberos[0].id, // Logic to assign random if null
                 servicio_id: selectedService?.id,
                 cliente_nombre: clientName,
                 cliente_telefono: clientPhone,
-                timestamp_inicio: `${selectedDate}T${selectedTime}:00`,
-                timestamp_fin: calculateEndTime(`${selectedDate}T${selectedTime}:00`, selectedService?.duracion_minutos || 30),
+                timestamp_inicio: new Date(`${selectedDate}T${selectedTime}:00-07:00`).toISOString(),
+                timestamp_fin: calculateEndTime(`${selectedDate}T${selectedTime}:00-07:00`, selectedService?.duracion_minutos || 30),
                 origen: 'walkin', // or web
                 estado: 'confirmada',
                 notas: clientNote
@@ -116,7 +131,7 @@ export default function BookingPage() {
     }
 
     // Generate available time slots (Simplified logic for demo)
-    const generateTimeSlots = (dateStr: string) => {
+    const generateTimeSlots = (_dateStr: string) => {
         // In real app, check availability vs existing appointments
         const slots = []
         for (let h = 9; h < 20; h++) {
@@ -127,24 +142,24 @@ export default function BookingPage() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-900 text-white p-4 md:p-8">
+        <div className="min-h-screen bg-background text-foreground p-4 md:p-8">
             <div className="max-w-2xl mx-auto">
                 {/* Header */}
                 <div className="text-center mb-10">
                     <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent mb-2">
                         BarberCloud
                     </h1>
-                    <p className="text-slate-400">Reserva tu próxima experiencia</p>
+                    <p className="text-muted-foreground">Reserva tu próxima experiencia</p>
                 </div>
 
                 {/* Progress Bar */}
                 <div className="flex items-center justify-between mb-8 relative">
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-slate-800 -z-10 rounded"></div>
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-surface -z-10 rounded"></div>
                     {[1, 2, 3, 4].map((s) => (
                         <div
                             key={s}
                             className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300
-                            ${step >= s ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/50' : 'bg-slate-800 text-slate-500 border border-slate-700'}
+                            ${step >= s ? 'bg-purple-600 text-foreground shadow-lg shadow-purple-900/50' : 'bg-surface text-muted-foreground/70 border border-border'}
                             `}
                         >
                             {s}
@@ -168,9 +183,9 @@ export default function BookingPage() {
                                     >
                                         <div>
                                             <h3 className="font-bold text-lg group-hover:text-purple-400 transition-colors">{servicio.nombre}</h3>
-                                            <p className="text-sm text-slate-400">{servicio.duracion_minutos} min</p>
+                                            <p className="text-sm text-muted-foreground">{servicio.duracion_minutos} min</p>
                                         </div>
-                                        <div className="text-xl font-bold text-white">
+                                        <div className="text-xl font-bold text-foreground">
                                             ${servicio.precio}
                                         </div>
                                     </div>
@@ -189,9 +204,9 @@ export default function BookingPage() {
                                 onClick={() => handleBarberSelect(null)}
                                 className="glass-card p-6 text-center hover:border-purple-500/50 cursor-pointer transition-all hover:scale-[1.02]"
                             >
-                                <div className="w-16 h-16 rounded-full bg-slate-700 mx-auto mb-3 flex items-center justify-center text-2xl">🎲</div>
+                                <div className="w-16 h-16 rounded-full bg-surface-hover mx-auto mb-3 flex items-center justify-center text-2xl">🎲</div>
                                 <h3 className="font-bold">Cualquiera</h3>
-                                <p className="text-xs text-slate-400 mt-1">El primero disponible</p>
+                                <p className="text-xs text-muted-foreground mt-1">El primero disponible</p>
                             </div>
                             {barberos.map(barbero => (
                                 <div
@@ -199,14 +214,14 @@ export default function BookingPage() {
                                     onClick={() => handleBarberSelect(barbero)}
                                     className="glass-card p-6 text-center hover:border-purple-500/50 cursor-pointer transition-all hover:scale-[1.02]"
                                 >
-                                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 mx-auto mb-3 flex items-center justify-center text-xl font-bold text-white">
+                                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 mx-auto mb-3 flex items-center justify-center text-xl font-bold text-foreground">
                                         {barbero.nombre[0]}
                                     </div>
                                     <h3 className="font-bold text-sm">{barbero.nombre}</h3>
                                 </div>
                             ))}
                         </div>
-                        <button onClick={() => setStep(1)} className="text-slate-400 text-sm mt-4 hover:text-white">← Volver</button>
+                        <button onClick={() => setStep(1)} className="text-muted-foreground text-sm mt-4 hover:text-foreground">← Volver</button>
                     </div>
                 )}
 
@@ -216,11 +231,11 @@ export default function BookingPage() {
                         <h2 className="text-xl font-bold mb-4">Fecha y Hora</h2>
 
                         <div className="glass-card p-4 mb-4">
-                            <label className="block text-sm text-slate-400 mb-2">Fecha</label>
+                            <label className="block text-sm text-muted-foreground mb-2">Fecha</label>
                             <input
                                 type="date"
                                 className="input-field"
-                                min={new Date().toISOString().split('T')[0]}
+                                min={todayInTZ()}
                                 onChange={(e) => setSelectedDate(e.target.value)}
                             />
                         </div>
@@ -231,7 +246,7 @@ export default function BookingPage() {
                                     <button
                                         key={time}
                                         onClick={() => handleTimeSelect(selectedDate, time)}
-                                        className="py-2 rounded-lg bg-slate-800 hover:bg-purple-600 hover:text-white text-slate-300 transition-colors text-sm font-medium border border-slate-700"
+                                        className="py-2 rounded-lg bg-surface hover:bg-purple-600 hover:text-foreground text-muted transition-colors text-sm font-medium border border-border"
                                     >
                                         {time}
                                     </button>
@@ -239,7 +254,7 @@ export default function BookingPage() {
                             </div>
                         )}
 
-                        <button onClick={() => setStep(2)} className="text-slate-400 text-sm mt-4 hover:text-white">← Volver</button>
+                        <button onClick={() => setStep(2)} className="text-muted-foreground text-sm mt-4 hover:text-foreground">← Volver</button>
                     </div>
                 )}
 
@@ -250,7 +265,7 @@ export default function BookingPage() {
 
                         <div className="glass-card p-4 space-y-4">
                             <div>
-                                <label className="block text-sm text-slate-400 mb-1">Nombre Completo</label>
+                                <label className="block text-sm text-muted-foreground mb-1">Nombre Completo</label>
                                 <input
                                     type="text"
                                     value={clientName}
@@ -260,7 +275,7 @@ export default function BookingPage() {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm text-slate-400 mb-1">Teléfono</label>
+                                <label className="block text-sm text-muted-foreground mb-1">Teléfono</label>
                                 <input
                                     type="tel"
                                     value={clientPhone}
@@ -270,7 +285,7 @@ export default function BookingPage() {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm text-slate-400 mb-1">Notas (Opcional)</label>
+                                <label className="block text-sm text-muted-foreground mb-1">Notas (Opcional)</label>
                                 <textarea
                                     value={clientNote}
                                     onChange={e => setClientNote(e.target.value)}
@@ -280,9 +295,9 @@ export default function BookingPage() {
                             </div>
                         </div>
 
-                        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                            <h3 className="font-bold text-white mb-2">Resumen</h3>
-                            <div className="text-sm space-y-1 text-slate-400">
+                        <div className="bg-surface/ p-4 rounded-xl border border-border">
+                            <h3 className="font-bold text-foreground mb-2">Resumen</h3>
+                            <div className="text-sm space-y-1 text-muted-foreground">
                                 <p>🗓️ {selectedDate} a las {selectedTime}</p>
                                 <p>✂️ {selectedService?.nombre} (${selectedService?.precio})</p>
                                 <p>💈 {selectedBarber ? selectedBarber.nombre : 'Cualquier profesional'}</p>
@@ -298,7 +313,7 @@ export default function BookingPage() {
                         </button>
 
                         <div className="text-center">
-                            <button onClick={() => setStep(3)} className="text-slate-400 text-sm hover:text-white">← Volver</button>
+                            <button onClick={() => setStep(3)} className="text-muted-foreground text-sm hover:text-foreground">← Volver</button>
                         </div>
                     </div>
                 )}

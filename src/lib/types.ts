@@ -3,6 +3,9 @@
 // ============================================================================
 
 // Schedule Types (used in JSONB columns)
+/**
+ * Define las horas de apertura y cierre de un día de la semana
+ */
 export interface HorarioDia {
     apertura: string  // "09:00"
     cierre: string    // "19:00"
@@ -36,6 +39,8 @@ export type RolAdmin = 'admin' | 'secretaria'
 export interface Sucursal {
     id: string
     nombre: string
+    slug: string | null
+    plan: string
     direccion: string | null
     telefono_whatsapp: string
     google_maps_url: string | null
@@ -45,6 +50,7 @@ export interface Sucursal {
     instagram_url: string | null
     zona_ubicacion: string | null
     horario_apertura: HorarioApertura
+    timezone: string
     activa: boolean
     created_at: string
 }
@@ -69,10 +75,25 @@ export interface Servicio {
     nombre: string
     duracion_minutos: number
     precio: number
+    costo_directo?: number
     activo: boolean
     created_at: string
 }
 
+export interface CostoFijo {
+    id: string
+    sucursal_id: string
+    mes: string
+    categoria: string
+    monto: number
+    created_at: string
+    updated_at: string
+}
+
+/**
+ * Tabla: citas
+ * Maneja todas las reservas de cortes, tanto por WhatsApp como físicamente (walkins)
+ */
 export interface Cita {
     id: string
     sucursal_id: string
@@ -117,6 +138,9 @@ export interface UsuarioAdmin {
 // Joined/Extended Types (for queries with relations)
 // ============================================================================
 
+/**
+ * Extensión de la tabla Citas incluyendo sus relaciones para mayor facilidad en las queries de front-end
+ */
 export interface CitaConRelaciones extends Cita {
     servicio?: Servicio
     barbero?: Barbero
@@ -131,6 +155,9 @@ export interface BarberoConSucursal extends Barbero {
 // API/Form Types
 // ============================================================================
 
+/**
+ * Tipo usado para la creación inicial de una cita desde la API o un Formulario
+ */
 export interface CrearCitaInput {
     sucursal_id: string
     barbero_id: string
@@ -157,6 +184,12 @@ export interface KPIs {
     completadas: number
     ingresos: number
     noShows: number
+    tendencias: {
+        citasHoy: number
+        completadas: number
+        ingresos: number
+        noShows: number
+    }
 }
 
 export interface FiltrosCitas {
@@ -169,6 +202,10 @@ export interface FiltrosCitas {
 // Supabase Database Type (for client type safety)
 // ============================================================================
 
+/**
+ * Tipado principal de la base de datos de Supabase. Provee autocompletado y validación de tipos 
+ * para todas las tablas de la aplicación.
+ */
 export interface Database {
     public: {
         Tables: {
@@ -206,6 +243,12 @@ export interface Database {
                 Row: UsuarioAdmin
                 Insert: Omit<UsuarioAdmin, 'id' | 'created_at'>
                 Update: Partial<Omit<UsuarioAdmin, 'id' | 'created_at'>>
+                Relationships: []
+            }
+            costos_fijos: {
+                Row: CostoFijo
+                Insert: Omit<CostoFijo, 'id' | 'created_at' | 'updated_at'>
+                Update: Partial<Omit<CostoFijo, 'id' | 'created_at'>>
                 Relationships: []
             }
         }

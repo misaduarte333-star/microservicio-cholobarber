@@ -1,16 +1,26 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { createClient, formatError } from '@/lib/supabase'
+import { createClient, formatError, getIsDemoMode } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 import type { CitaConRelaciones, EstadoCita, Servicio, Barbero } from '@/lib/types'
+import { APP_TIMEZONE, todayInTZ, startOfDayISO, endOfDayISO } from '@/lib/timezone'
 
+/**
+ * Página administrativa para la gestión general de citas.
+ * Ofrece dos modos de vista: 'Diario' (para gestionar de manera operativa) e 'Historial'
+ * (para búsqueda y análisis retrospectivo).
+ */
 export default function CitasPage() {
+    const { sucursalId } = useAuth()
     // 1. Hydration mismatch fix: Start with a stable state or wait for mount
     const [mounted, setMounted] = useState(false)
     const [citas, setCitas] = useState<CitaConRelaciones[]>([])
     const [loading, setLoading] = useState(true)
     const [filtroFecha, setFiltroFecha] = useState('') // Empty initially
     const [filtroEstado, setFiltroEstado] = useState<EstadoCita | 'todas'>('todas')
+    const [filtroServicio, setFiltroServicio] = useState<string>('todos')
+    const [serviciosList, setServiciosList] = useState<any[]>([])
 
     
     // History Mode State
@@ -19,7 +29,7 @@ export default function CitasPage() {
     const [historyEnd, setHistoryEnd] = useState('')
     const [searchTerm, setSearchTerm] = useState('')
 
-    const [debugMsg, setDebugMsg] = useState('')
+
     const [showModal, setShowModal] = useState(false)
     const [editingCita, setEditingCita] = useState<CitaConRelaciones | null>(null)
     const [initialOrigen, setInitialOrigen] = useState<'whatsapp' | 'walkin'>('whatsapp')
@@ -39,8 +49,9 @@ export default function CitasPage() {
     const handleDeleteCita = async (id: string) => {
         if (!confirm('¿Estás seguro de eliminar esta cita?')) return
         try {
-            const { error } = await (supabase.from('citas') as any).delete().eq('id', id)
-            if (error) throw error
+            const res = await fetch(`/api/citas?id=${id}`, { method: 'DELETE' })
+            const result = await res.json()
+            if (!res.ok || !result.success) throw new Error(result.error || 'Error al eliminar')
             cargarCitas()
         } catch (err: any) {
             alert('Error al eliminar: ' + err.message)
@@ -66,26 +77,41 @@ export default function CitasPage() {
 
     // Initialize date only on client side
     useEffect(() => {
-        const today = new Date().toISOString().split('T')[0]
+        const today = todayInTZ()
         setFiltroFecha(today)
-        
+
         // Default history range: last 30 days
         const lastMonth = new Date()
         lastMonth.setDate(lastMonth.getDate() - 30)
-        setHistoryStart(lastMonth.toISOString().split('T')[0])
+        setHistoryStart(lastMonth.toLocaleDateString('en-CA', { timeZone: APP_TIMEZONE }))
         setHistoryEnd(today)
 
         setMounted(true)
     }, [])
 
+    useEffect(() => {
+        if (!sucursalId) return
+        const fetchServicios = async () => {
+             const { data } = await supabase.from('servicios')
+                 .select('id, nombre')
+                 .eq('activo', true)
+                 .eq('sucursal_id', sucursalId)
+             if (data) setServiciosList(data)
+        }
+        fetchServicios()
+    }, [sucursalId])
+
+    /**
+     * Recupera las citas desde Supabase aplicando los filtros seleccionados (fecha,
+     * estado, servicio, modo de vista, etc.).
+     */
     const cargarCitas = useCallback(async () => {
         if (!filtroFecha) return // Wait for date
 
         setLoading(true)
-        setDebugMsg('Cargando...')
         try {
-            const inicioDelDia = `${filtroFecha}T00:00:00`
-            const finDelDia = `${filtroFecha}T23:59:59`
+            const inicioDelDia = startOfDayISO(filtroFecha)
+            const finDelDia = endOfDayISO(filtroFecha)
 
             console.log('Fetching citas for:', filtroFecha)
 
@@ -96,7 +122,7 @@ export default function CitasPage() {
           *,
           servicio:servicios(*),
           barbero:barberos(nombre, estacion_id)
-        `)
+        `).eq('sucursal_id', sucursalId)
 
             if (viewMode === 'daily') {
                 query = query
@@ -105,8 +131,8 @@ export default function CitasPage() {
                     .order('timestamp_inicio', { ascending: true })
             } else {
                 // History Mode
-                if (historyStart) query = query.gte('timestamp_inicio', `${historyStart}T00:00:00`)
-                if (historyEnd) query = query.lte('timestamp_inicio', `${historyEnd}T23:59:59`)
+                if (historyStart) query = query.gte('timestamp_inicio', startOfDayISO(historyStart))
+                if (historyEnd) query = query.lte('timestamp_inicio', endOfDayISO(historyEnd))
                 
                 if (searchTerm) {
                     query = query.ilike('cliente_nombre', `%${searchTerm}%`)
@@ -120,29 +146,38 @@ export default function CitasPage() {
                 query = query.eq('estado', filtroEstado)
             }
 
+            if (filtroServicio !== 'todos') {
+                if (filtroServicio === 'personalizado') {
+                    query = query.is('servicio_id', null)
+                } else {
+                    query = query.eq('servicio_id', filtroServicio)
+                }
+            }
+
             const { data, error } = await query
 
             if (error) {
                 console.warn('Error Supabase:', formatError(error))
-                setDebugMsg(`Error: ${formatError(error)}`)
+                console.warn('Error Supabase:', formatError(error))
                 setCitas([])
             } else {
                 if (!data || data.length === 0) {
-                    setDebugMsg('No hay citas encontradas.')
                     setCitas([])
                 } else {
-                    setDebugMsg(`Datos cargados: ${data.length} citas`)
                     setCitas(data)
                 }
             }
         } catch (err: any) {
             console.warn('Catch Error:', formatError(err))
-            setDebugMsg(`Catch Error: ${formatError(err)}`)
-            setCitas(getDemoCitas(filtroFecha))
+            if (getIsDemoMode()) {
+                setCitas(getDemoCitas(filtroFecha))
+            } else {
+                setCitas([])
+            }
         } finally {
             setLoading(false)
         }
-    }, [supabase, filtroFecha, filtroEstado, viewMode, historyStart, historyEnd, searchTerm])
+    }, [supabase, filtroFecha, filtroEstado, filtroServicio, viewMode, historyStart, historyEnd, searchTerm, sucursalId])
 
     // Load data when mode changes or filters change (debouncing search could be added here)
     useEffect(() => {
@@ -156,7 +191,7 @@ export default function CitasPage() {
 
     // Avoid hydration mismatch by not rendering until mounted
     if (!mounted) {
-        return <div className="p-8 text-white">Cargando aplicación...</div>
+        return <div className="p-8 text-foreground">Cargando aplicación...</div>
     }
 
     return (
@@ -164,15 +199,15 @@ export default function CitasPage() {
             <div className="mb-8">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-white">Citas</h1>
-                        <p className="text-slate-400 mt-1">
+                        <h1 className="text-3xl font-bold text-foreground">Citas</h1>
+                        <p className="text-muted-foreground mt-1">
                             {viewMode === 'daily' ? 'Gestiona las citas del día' : 'Historial de clientes'}
                         </p>
                     </div>
                     <div className="flex gap-3 w-full md:w-auto">
                         <button
                             onClick={() => setViewMode(prev => prev === 'daily' ? 'history' : 'daily')}
-                            className="flex-1 md:flex-none px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white transition-colors flex items-center justify-center gap-2"
+                            className="flex-1 md:flex-none px-4 py-2 rounded-xl bg-surface-hover hover:bg-slate-600 text-foreground transition-colors flex items-center justify-center gap-2"
                         >
                             {viewMode === 'daily' ? (
                                 <>
@@ -207,32 +242,32 @@ export default function CitasPage() {
             {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                 <div className="glass-card p-4 text-center">
-                    <p className="text-2xl font-bold text-white">{citas.length}</p>
-                    <p className="text-xs text-slate-400">Total</p>
+                    <p className="text-2xl font-bold text-foreground">{citas.length}</p>
+                    <p className="text-xs text-muted-foreground">Total</p>
                 </div>
                 <div className="glass-card p-4 text-center border-l-2 border-blue-500">
                     <p className="text-2xl font-bold text-blue-400">
                         {citas.filter(c => c.estado === 'confirmada').length}
                     </p>
-                    <p className="text-xs text-slate-400">Confirmadas</p>
+                    <p className="text-xs text-muted-foreground">Confirmadas</p>
                 </div>
                 <div className="glass-card p-4 text-center border-l-2 border-emerald-500">
                     <p className="text-2xl font-bold text-emerald-400">
                         {citas.filter(c => c.estado === 'en_proceso').length}
                     </p>
-                    <p className="text-xs text-slate-400">En Proceso</p>
+                    <p className="text-xs text-muted-foreground">En Proceso</p>
                 </div>
                 <div className="glass-card p-4 text-center border-l-2 border-slate-500">
-                    <p className="text-2xl font-bold text-slate-400">
+                    <p className="text-2xl font-bold text-muted-foreground">
                         {citas.filter(c => c.estado === 'finalizada').length}
                     </p>
-                    <p className="text-xs text-slate-400">Finalizadas</p>
+                    <p className="text-xs text-muted-foreground">Finalizadas</p>
                 </div>
                 <div className="glass-card p-4 text-center border-l-2 border-red-500">
                     <p className="text-2xl font-bold text-red-400">
                         {citas.filter(c => c.estado === 'cancelada' || c.estado === 'no_show').length}
                     </p>
-                    <p className="text-xs text-slate-400">Canceladas</p>
+                    <p className="text-xs text-muted-foreground">Canceladas</p>
                 </div>
             </div>
 
@@ -243,12 +278,12 @@ export default function CitasPage() {
                         /* Daily Filters */
                         <>
                             <div>
-                                <label className="block text-xs text-slate-400 mb-1">Fecha</label>
+                                <label className="block text-xs text-muted-foreground mb-1">Fecha</label>
                                 <input
                                     type="date"
                                     value={filtroFecha}
                                     onChange={(e) => setFiltroFecha(e.target.value)}
-                                    className="input-field w-full md:w-auto text-white"
+                                    className="input-field w-full md:w-auto text-foreground"
                                 />
                             </div>
                         </>
@@ -256,9 +291,9 @@ export default function CitasPage() {
                         /* History Filters */
                         <>
                             <div>
-                                <label className="block text-xs text-slate-400 mb-1">Buscar Cliente</label>
+                                <label className="block text-xs text-muted-foreground mb-1">Buscar Cliente</label>
                                 <div className="relative">
-                                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                     </svg>
                                     <input
@@ -271,7 +306,7 @@ export default function CitasPage() {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs text-slate-400 mb-1">Desde</label>
+                                <label className="block text-xs text-muted-foreground mb-1">Desde</label>
                                 <input
                                     type="date"
                                     value={historyStart}
@@ -280,7 +315,7 @@ export default function CitasPage() {
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs text-slate-400 mb-1">Hasta</label>
+                                <label className="block text-xs text-muted-foreground mb-1">Hasta</label>
                                 <input
                                     type="date"
                                     value={historyEnd}
@@ -293,11 +328,11 @@ export default function CitasPage() {
 
                     {/* Common Filters */}
                     <div>
-                        <label className="block text-xs text-slate-400 mb-1">Estado</label>
+                        <label className="block text-xs text-muted-foreground mb-1">Estado</label>
                         <select
                             value={filtroEstado}
                             onChange={(e) => setFiltroEstado(e.target.value as EstadoCita | 'todas')}
-                            className="input-field w-full md:w-auto text-white"
+                            className="input-field w-full md:w-auto text-foreground"
                         >
                             <option value="todas">Todas</option>
                             <option value="confirmada">Confirmadas</option>
@@ -308,6 +343,20 @@ export default function CitasPage() {
                             <option value="no_show">No Show</option>
                         </select>
                     </div>
+                    <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Servicio</label>
+                        <select
+                            value={filtroServicio}
+                            onChange={(e) => setFiltroServicio(e.target.value)}
+                            className="input-field w-full md:w-auto text-foreground"
+                        >
+                            <option value="todos">Todos los servicios</option>
+                            {serviciosList.map(s => (
+                                <option key={s.id} value={s.id}>{s.nombre}</option>
+                            ))}
+                            <option value="personalizado">Otro / Personalizado</option>
+                        </select>
+                    </div>
                     <button
                         onClick={() => cargarCitas()}
                         className="btn-secondary px-4 py-2"
@@ -316,7 +365,7 @@ export default function CitasPage() {
                     </button>
                     
                     {viewMode === 'history' && (
-                        <div className="ml-auto text-xs text-slate-500 self-center">
+                        <div className="ml-auto text-xs text-muted-foreground/70 self-center">
                             Mostrando últimos 50 resultados
                         </div>
                     )}
@@ -331,7 +380,7 @@ export default function CitasPage() {
                     </div>
                 ) : citas.length === 0 ? (
                     <div className="glass-card p-8 text-center">
-                        <p className="text-slate-400">No hay citas para esta fecha</p>
+                        <p className="text-muted-foreground">No hay citas para esta fecha</p>
                     </div>
                 ) : (
                     citas.map((cita) => (
@@ -339,18 +388,23 @@ export default function CitasPage() {
                             {/* Header: Time & Status */}
                             <div className="flex justify-between items-start mb-3">
                                 <div>
-                                    <div className="text-lg font-bold text-white font-mono">
-                                        {cita.timestamp_inicio ? new Date(cita.timestamp_inicio).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                    {viewMode === 'history' && cita.timestamp_inicio && (
+                                        <div className="text-xs font-semibold text-purple-400 mb-0.5">
+                                            {new Date(cita.timestamp_inicio).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', timeZone: APP_TIMEZONE })}
+                                        </div>
+                                    )}
+                                    <div className="text-lg font-bold text-foreground font-mono leading-none">
+                                        {cita.timestamp_inicio ? new Date(cita.timestamp_inicio).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: APP_TIMEZONE }) : '--:--'}
                                     </div>
-                                    <div className="text-xs text-slate-400">
-                                        {cita.timestamp_fin ? new Date(cita.timestamp_fin).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                        - {cita.timestamp_fin ? new Date(cita.timestamp_fin).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: APP_TIMEZONE }) : '--:--'}
                                     </div>
                                 </div>
                                 <span className={`
                                     status-badge
                                     ${cita.estado === 'confirmada' ? 'bg-blue-500/20 text-blue-400' : ''}
                                     ${cita.estado === 'en_proceso' ? 'status-in-progress' : ''}
-                                    ${cita.estado === 'finalizada' ? 'bg-slate-500/20 text-slate-400' : ''}
+                                    ${cita.estado === 'finalizada' ? 'bg-slate-500/20 text-muted-foreground' : ''}
                                     ${cita.estado === 'cancelada' ? 'status-cancelled' : ''}
                                     ${cita.estado === 'no_show' ? 'bg-red-500/20 text-red-400' : ''}
                                 `}>
@@ -361,22 +415,22 @@ export default function CitasPage() {
                             {/* Client Info */}
                             <div className="mb-3">
                                 <div className="flex items-center gap-2">
-                                    <p className="font-medium text-white text-lg">{cita.cliente_nombre}</p>
+                                    <p className="font-medium text-foreground text-lg">{cita.cliente_nombre}</p>
                                     {cita.origen === 'whatsapp' && (
                                         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">WA</span>
                                     )}
                                 </div>
-                                <p className="text-sm text-slate-400">{cita.cliente_telefono}</p>
+                                <p className="text-sm text-muted-foreground">{cita.cliente_telefono}</p>
                             </div>
 
                             {/* Service & Barber */}
                             <div className="grid grid-cols-2 gap-2 mb-4 text-sm">
-                                <div className="bg-slate-800/50 p-2 rounded">
-                                    <p className="text-xs text-slate-500 mb-0.5">Servicio</p>
+                                <div className="bg-surface/ p-2 rounded">
+                                    <p className="text-xs text-muted-foreground/70 mb-0.5">Servicio</p>
                                     <p className="text-slate-200 truncate">{cita.servicio?.nombre || 'Personalizado'}</p>
                                 </div>
-                                <div className="bg-slate-800/50 p-2 rounded">
-                                    <p className="text-xs text-slate-500 mb-0.5">Barbero</p>
+                                <div className="bg-surface/ p-2 rounded">
+                                    <p className="text-xs text-muted-foreground/70 mb-0.5">Barbero</p>
                                     <p className="text-slate-200 truncate">{cita.barbero?.nombre || 'Sin asignar'}</p>
                                 </div>
                             </div>
@@ -403,7 +457,7 @@ export default function CitasPage() {
                                 )}
                                 <button
                                     onClick={() => handleEditCita(cita)}
-                                    className="p-2 rounded-lg bg-slate-700 text-slate-300"
+                                    className="p-2 rounded-lg bg-surface-hover text-muted"
                                 >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                                 </button>
@@ -430,43 +484,50 @@ export default function CitasPage() {
                         <svg className="w-12 h-12 text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
-                        <p className="text-slate-500">No hay citas para esta fecha</p>
+                        <p className="text-muted-foreground/70">No hay citas para esta fecha</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full min-w-[800px]">
-                            <thead className="bg-slate-800/50">
+                            <thead className="bg-surface/">
                                 <tr>
-                                    <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Hora</th>
-                                    <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Cliente</th>
-                                    <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Servicio</th>
-                                    <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Barbero</th>
-                                    <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Estado</th>
-                                    <th className="px-3 md:px-6 py-4 text-right text-xs font-semibold text-slate-400 uppercase">Acciones</th>
+                                    <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">{viewMode === 'history' ? 'Fecha y Hora' : 'Hora'}</th>
+                                    <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">Cliente</th>
+                                    <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">Servicio</th>
+                                    <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">Barbero</th>
+                                    <th className="px-3 md:px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase">Estado</th>
+                                    <th className="px-3 md:px-6 py-4 text-right text-xs font-semibold text-muted-foreground uppercase">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-700/50">
                                 {citas.map((cita) => (
-                                    <tr key={cita.id} className="hover:bg-slate-800/30 transition-colors">
-                                        <td className="px-3 md:px-6 py-4 font-mono text-sm text-slate-300">
-                                            {cita.timestamp_inicio ? new Date(cita.timestamp_inicio).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                                            <span className="text-slate-500 mx-1">-</span>
-                                            {cita.timestamp_fin ? new Date(cita.timestamp_fin).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                    <tr key={cita.id} className="hover:bg-surface/ transition-colors">
+                                        <td className="px-3 md:px-6 py-4 font-mono text-sm text-muted">
+                                            {viewMode === 'history' && cita.timestamp_inicio && (
+                                                <div className="text-xs font-semibold text-foreground mb-1">
+                                                    {new Date(cita.timestamp_inicio).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', timeZone: APP_TIMEZONE })}
+                                                </div>
+                                            )}
+                                            <div>
+                                                <span className="text-slate-300">{cita.timestamp_inicio ? new Date(cita.timestamp_inicio).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: APP_TIMEZONE }) : '--:--'}</span>
+                                                <span className="text-muted-foreground/70 mx-1">-</span>
+                                                <span className="text-muted-foreground/90">{cita.timestamp_fin ? new Date(cita.timestamp_fin).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: APP_TIMEZONE }) : '--:--'}</span>
+                                            </div>
                                         </td>
                                         <td className="px-3 md:px-6 py-4">
-                                            <p className="font-medium text-white">{cita.cliente_nombre}</p>
+                                            <p className="font-medium text-foreground">{cita.cliente_nombre}</p>
                                             <div className="flex items-center gap-2 mt-1">
-                                                <span className="text-xs text-slate-400">{cita.cliente_telefono}</span>
+                                                <span className="text-xs text-muted-foreground">{cita.cliente_telefono}</span>
                                                 {cita.origen === 'whatsapp' && (
                                                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">WA</span>
                                                 )}
                                             </div>
                                         </td>
                                         <td className="px-3 md:px-6 py-4">
-                                            <div className="text-sm text-slate-300">
+                                            <div className="text-sm text-muted">
                                                 {cita.servicio?.nombre || 'Servicio Personalizado'}
                                             </div>
-                                            <div className="text-xs text-slate-500">
+                                            <div className="text-xs text-muted-foreground/70">
                                                 {cita.barbero?.nombre || 'Sin barbero'}
                                             </div>
                                         </td>
@@ -475,7 +536,7 @@ export default function CitasPage() {
                         status-badge
                         ${cita.estado === 'confirmada' ? 'bg-blue-500/20 text-blue-400' : ''}
                         ${cita.estado === 'en_proceso' ? 'status-in-progress' : ''}
-                        ${cita.estado === 'finalizada' ? 'bg-slate-500/20 text-slate-400 ' : ''}
+                        ${cita.estado === 'finalizada' ? 'bg-slate-500/20 text-muted-foreground ' : ''}
                         ${cita.estado === 'cancelada' ? 'status-cancelled' : ''}
                         ${cita.estado === 'no_show' ? 'bg-red-500/20 text-red-400' : ''}
                         `}>
@@ -506,7 +567,7 @@ export default function CitasPage() {
 
                                                 <button
                                                     onClick={() => handleEditCita(cita)}
-                                                    className="p-1.5 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600"
+                                                    className="p-1.5 rounded-lg bg-surface-hover text-muted hover:bg-slate-600"
                                                     title="Editar"
                                                 >
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
@@ -534,6 +595,7 @@ export default function CitasPage() {
                 showModal && (
                     <CitaModal
                         cita={editingCita}
+                        sucursalId={sucursalId}
                         onClose={() => setShowModal(false)}
                         onSave={() => {
                             setShowModal(false)
@@ -614,11 +676,13 @@ function getDemoCitas(fecha: string): CitaConRelaciones[] {
 
 function CitaModal({
     cita,
+    sucursalId,
     onClose,
     onSave,
     initialOrigen = 'whatsapp'
 }: {
     cita?: CitaConRelaciones | null
+    sucursalId: string | null
     onClose: () => void
     onSave: () => void
     initialOrigen?: 'whatsapp' | 'walkin'
@@ -633,34 +697,34 @@ function CitaModal({
         cliente_telefono: cita?.cliente_telefono || '',
         servicio_id: cita?.servicio_id || (cita ? 'custom' : ''), // If editing and no service, assume custom
         barbero_id: cita?.barbero_id || '',
-        fecha: cita?.timestamp_inicio ? cita.timestamp_inicio.split('T')[0] : new Date().toISOString().split('T')[0],
-        hora: cita?.timestamp_inicio ? cita.timestamp_inicio.split('T')[1].substring(0, 5) : '10:00',
-        horaFin: cita?.timestamp_fin ? cita.timestamp_fin.split('T')[1].substring(0, 5) : '10:30', // New Field
+        fecha: cita?.timestamp_inicio ? new Date(cita.timestamp_inicio).toLocaleDateString('en-CA', { timeZone: APP_TIMEZONE }) : todayInTZ(),
+        hora: cita?.timestamp_inicio ? new Date(cita.timestamp_inicio).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: APP_TIMEZONE }) : '10:00',
+        horaFin: cita?.timestamp_fin ? new Date(cita.timestamp_fin).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: APP_TIMEZONE }) : '10:30',
         notas: cita?.notas || ''
     })
 
     const supabase = createClient()
 
-    // State for sucursalId
-    const [sucursalId, setSucursalId] = useState<string | null>(null)
-
     // Load dependencies on mount
     useEffect(() => {
+        if (!sucursalId) return
         const loadDeps = async () => {
             // Load Services
-            const { data: servs } = await supabase.from('servicios').select('*').eq('activo', true)
+            const { data: servs } = await supabase.from('servicios')
+                .select('*')
+                .eq('activo', true)
+                .eq('sucursal_id', sucursalId)
             if (servs) setServicios(servs)
 
             // Load Barbers
-            const { data: barbs } = await supabase.from('barberos').select('*').eq('activo', true)
+            const { data: barbs } = await supabase.from('barberos')
+                .select('*')
+                .eq('activo', true)
+                .eq('sucursal_id', sucursalId)
             if (barbs) setBarberos(barbs)
-
-            // Load Sucursal ID
-            const { data: suc } = await (supabase.from('sucursales') as any).select('id').limit(1).single()
-            if (suc) setSucursalId(suc.id)
         }
         loadDeps()
-    }, [])
+    }, [sucursalId])
 
     // Update End Time automatically when Service or Start Time changes
     // BUT only if we are creating a new appointment or changing the service
@@ -713,8 +777,8 @@ function CitaModal({
             // Calculate timestamps
             // We need to create a proper Date object from the input date/time to send uniform ISO/UTC to DB
             // Browser creates Date in local timezone by default from these strings
-            const startDate = new Date(`${formData.fecha}T${formData.hora}:00`)
-            const endDate = new Date(`${formData.fecha}T${formData.horaFin}:00`)
+            const startDate = new Date(`${formData.fecha}T${formData.hora}:00-07:00`)
+            const endDate = new Date(`${formData.fecha}T${formData.horaFin}:00-07:00`)
 
             // Send ISO strings (UTC) to DB
             const timestamp_inicio = startDate.toISOString()
@@ -765,13 +829,13 @@ function CitaModal({
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="glass-card w-full max-w-lg animate-slide-in max-h-[90vh] overflow-y-auto border border-slate-700">
-                <div className="flex items-center justify-between p-6 border-b border-slate-700">
-                    <h2 className="text-xl font-bold text-white">
+            <div className="glass-card w-full max-w-lg animate-slide-in max-h-[90vh] overflow-y-auto border border-border">
+                <div className="flex items-center justify-between p-6 border-b border-border">
+                    <h2 className="text-xl font-bold text-foreground">
                         {cita ? 'Editar Cita' : (initialOrigen === 'walkin' ? 'Nuevo Walk-in' : 'Nueva Cita')}
                     </h2>
-                    <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-700 transition-colors">
-                        <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-hover transition-colors">
+                        <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
@@ -781,7 +845,7 @@ function CitaModal({
                     {/* Cliente */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-2">
-                            <label className="block text-sm font-medium text-slate-300 mb-2">Cliente</label>
+                            <label className="block text-sm font-medium text-muted mb-2">Cliente</label>
                             <input
                                 type="text"
                                 required
@@ -792,7 +856,7 @@ function CitaModal({
                             />
                         </div>
                         <div className="col-span-2">
-                            <label className="block text-sm font-medium text-slate-300 mb-2">Teléfono</label>
+                            <label className="block text-sm font-medium text-muted mb-2">Teléfono</label>
                             <input
                                 type="tel"
                                 className="input-field"
@@ -806,7 +870,7 @@ function CitaModal({
                     {/* Detalle */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">Servicio</label>
+                            <label className="block text-sm font-medium text-muted mb-2">Servicio</label>
                             <select
                                 required
                                 className="input-field"
@@ -821,7 +885,7 @@ function CitaModal({
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">Barbero</label>
+                            <label className="block text-sm font-medium text-muted mb-2">Barbero</label>
                             <select
                                 className="input-field"
                                 value={formData.barbero_id}
@@ -838,7 +902,7 @@ function CitaModal({
                     {/* Tiempo */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">Fecha</label>
+                            <label className="block text-sm font-medium text-muted mb-2">Fecha</label>
                             <input
                                 type="date"
                                 required
@@ -849,7 +913,7 @@ function CitaModal({
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Inicio</label>
+                                <label className="block text-sm font-medium text-muted mb-2">Inicio</label>
                                 <input
                                     type="time"
                                     required
@@ -859,7 +923,7 @@ function CitaModal({
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Fin</label>
+                                <label className="block text-sm font-medium text-muted mb-2">Fin</label>
                                 <input
                                     type="time"
                                     required
@@ -872,7 +936,7 @@ function CitaModal({
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Notas</label>
+                        <label className="block text-sm font-medium text-muted mb-2">Notas</label>
                         <textarea
                             className="input-field min-h-[80px]"
                             placeholder="Notas adicionales..."
@@ -881,7 +945,7 @@ function CitaModal({
                         />
                     </div>
 
-                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
+                    <div className="flex justify-end gap-3 pt-4 border-t border-border">
                         <button type="button" onClick={onClose} className="btn-secondary">
                             Cancelar
                         </button>

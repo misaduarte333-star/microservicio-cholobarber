@@ -2,9 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient, formatError } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 import type { Servicio } from '@/lib/types'
 
+/**
+ * Página para administrar el catálogo de Servicios.
+ * Permite listar, agregar, editar, eliminar y activar/desactivar servicios.
+ */
 export default function ServiciosPage() {
+    const { sucursalId } = useAuth()
     const [servicios, setServicios] = useState<Servicio[]>([])
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
@@ -12,11 +18,19 @@ export default function ServiciosPage() {
 
     const supabase = createClient()
 
+    /**
+     * Recupera la lista de servicios ordenados por precio ascendente.
+     */
     const cargarServicios = useCallback(async () => {
+        if (!sucursalId) {
+            setLoading(false)
+            return
+        }
         try {
             const { data, error } = await supabase
                 .from('servicios')
                 .select('*')
+                .eq('sucursal_id', sucursalId)
                 .order('precio', { ascending: true })
 
             if (error) {
@@ -31,57 +45,60 @@ export default function ServiciosPage() {
         } finally {
             setLoading(false)
         }
-    }, [supabase])
+    }, [supabase, sucursalId])
 
     useEffect(() => {
         cargarServicios()
     }, [cargarServicios])
 
+    /**
+     * Elimina un servicio por su ID tras confirmación del usuario.
+     */
     const handleDelete = async (id: string) => {
         if (!confirm('¿Estás seguro de eliminar este servicio?')) return
 
         try {
-            const { error } = await supabase
-                .from('servicios')
-                .delete()
-                .eq('id', id)
-
-            if (error) {
-                console.warn('Error deleting:', formatError(error))
-                alert('Error al eliminar')
-            } else {
-                cargarServicios()
-            }
-        } catch {
-            setServicios(servicios.filter(s => s.id !== id))
+            const res = await fetch(`/api/servicios?id=${id}`, { method: 'DELETE' })
+            const result = await res.json()
+            if (!res.ok || !result.success) throw new Error(result.error || 'Error al eliminar')
+            cargarServicios()
+        } catch (err) {
+            console.warn('Error deleting:', formatError(err))
+            alert('Error al eliminar')
         }
     }
 
+    /**
+     * Abre el modal de edición para un servicio existente.
+     */
     const handleEdit = (servicio: Servicio) => {
         setEditingServicio(servicio)
         setShowModal(true)
     }
 
+    /**
+     * Abre el modal para crear un nuevo servicio en blanco.
+     */
     const handleNew = () => {
         setEditingServicio(null)
         setShowModal(true)
     }
 
+    /**
+     * Alterna el estado 'activo' de un servicio directamente desde la lista.
+     */
     const toggleActivo = async (servicio: Servicio) => {
         try {
-            const { error } = await (supabase
-                .from('servicios') as any)
-                .update({ activo: !servicio.activo })
-                .eq('id', servicio.id)
-
-            if (error) throw error
+            const res = await fetch('/api/servicios', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: servicio.id, activo: !servicio.activo })
+            })
+            const result = await res.json()
+            if (!res.ok || !result.success) throw new Error(result.error)
             cargarServicios()
         } catch (err) {
             console.warn('Error toggling:', formatError(err))
-            // Demo mode
-            setServicios(servicios.map(s =>
-                s.id === servicio.id ? { ...s, activo: !s.activo } : s
-            ))
         }
     }
 
@@ -90,8 +107,8 @@ export default function ServiciosPage() {
         <>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                 <div>
-                    <h1 className="text-3xl font-bold text-white">Servicios</h1>
-                    <p className="text-slate-400 mt-1">Administra el catálogo de servicios y precios</p>
+                    <h1 className="text-3xl font-bold text-foreground">Servicios</h1>
+                    <p className="text-muted-foreground mt-1">Administra el catálogo de servicios y precios</p>
                 </div>
                 <button
                     onClick={() => {
@@ -114,10 +131,10 @@ export default function ServiciosPage() {
                 </div>
             ) : servicios.length === 0 ? (
                 <div className="glass-card p-12 text-center">
-                    <svg className="w-12 h-12 text-slate-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-12 h-12 text-muted-foreground mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
                     </svg>
-                    <p className="text-slate-400">No hay servicios configurados</p>
+                    <p className="text-muted-foreground">No hay servicios configurados</p>
                     <button onClick={handleNew} className="btn-primary mt-4">
                         Crear primer servicio
                     </button>
@@ -154,9 +171,9 @@ export default function ServiciosPage() {
                             </div>
 
                             {/* Content */}
-                            <h3 className="text-xl font-bold text-white mb-2">{servicio.nombre}</h3>
+                            <h3 className="text-xl font-bold text-foreground mb-2">{servicio.nombre}</h3>
 
-                            <div className="flex items-center gap-4 text-slate-400 text-sm mb-4">
+                            <div className="flex items-center gap-4 text-muted-foreground text-sm mb-4">
                                 <div className="flex items-center gap-1">
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -167,17 +184,17 @@ export default function ServiciosPage() {
 
                             {/* Price */}
                             <div className="flex items-baseline gap-1 mb-6">
-                                <span className="text-3xl font-bold text-white">
+                                <span className="text-3xl font-bold text-foreground">
                                     ${servicio.precio.toLocaleString('es-MX')}
                                 </span>
-                                <span className="text-slate-400">MXN</span>
+                                <span className="text-muted-foreground">MXN</span>
                             </div>
 
                             {/* Actions */}
                             <div className="flex gap-2">
                                 <button
                                     onClick={() => handleEdit(servicio)}
-                                    className="flex-1 py-2 px-4 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors text-sm font-medium text-white flex items-center justify-center gap-2"
+                                    className="flex-1 py-2 px-4 rounded-lg bg-surface-hover hover:bg-slate-600 transition-colors text-sm font-medium text-foreground flex items-center justify-center gap-2"
                                 >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -203,6 +220,7 @@ export default function ServiciosPage() {
             {showModal && (
                 <ServicioModal
                     servicio={editingServicio}
+                    sucursalId={sucursalId}
                     onClose={() => setShowModal(false)}
                     onSave={() => {
                         setShowModal(false)
@@ -266,13 +284,17 @@ function getDemoServices(): Servicio[] {
     ]
 }
 
-// Modal Component
+/**
+ * Componente modal para crear o editar un servicio específico.
+ */
 function ServicioModal({
     servicio,
+    sucursalId,
     onClose,
     onSave
 }: {
     servicio: Servicio | null
+    sucursalId: string | null
     onClose: () => void
     onSave: () => void
 }) {
@@ -281,28 +303,11 @@ function ServicioModal({
         nombre: servicio?.nombre || '',
         duracion_minutos: servicio?.duracion_minutos?.toString() || '30',
         precio: servicio?.precio?.toString() || '',
+        costo_directo: servicio?.costo_directo?.toString() || '0',
         activo: servicio?.activo ?? true
     })
 
     const supabase = createClient()
-
-    const [sucursalId, setSucursalId] = useState<string | null>(null)
-
-    // Fetch sucursal_id on mount
-    useEffect(() => {
-        const fetchSucursal = async () => {
-            const { data } = await supabase
-                .from('sucursales')
-                .select('id')
-                .limit(1)
-                .single()
-
-            if (data) {
-                setSucursalId((data as any).id)
-            }
-        }
-        fetchSucursal()
-    }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -317,22 +322,26 @@ function ServicioModal({
                 nombre: formData.nombre,
                 duracion_minutos: parseInt(formData.duracion_minutos),
                 precio: parseFloat(formData.precio),
+                costo_directo: parseFloat(formData.costo_directo || '0'),
                 activo: formData.activo
             }
 
             if (servicio) {
-                const { error } = await (supabase
-                    .from('servicios') as any)
-                    .update(data)
-                    .eq('id', servicio.id)
-
-                if (error) throw error
+                const res = await fetch('/api/servicios', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: servicio.id, ...data })
+                })
+                const result = await res.json()
+                if (!res.ok || !result.success) throw new Error(result.error || 'Error al actualizar')
             } else {
-                const { error } = await (supabase
-                    .from('servicios') as any)
-                    .insert([{ ...data, sucursal_id: sucursalId }])
-
-                if (error) throw error
+                const res = await fetch('/api/servicios', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...data, sucursal_id: sucursalId })
+                })
+                const result = await res.json()
+                if (!res.ok || !result.success) throw new Error(result.error || 'Error al crear')
             }
 
             onSave()
@@ -346,13 +355,13 @@ function ServicioModal({
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="glass-card w-full max-w-md animate-slide-in border border-slate-700">
-                <div className="flex items-center justify-between p-6 border-b border-slate-700">
-                    <h2 className="text-xl font-bold text-white">
+            <div className="glass-card w-full max-w-md animate-slide-in border border-border">
+                <div className="flex items-center justify-between p-6 border-b border-border">
+                    <h2 className="text-xl font-bold text-foreground">
                         {servicio ? 'Editar Servicio' : 'Nuevo Servicio'}
                     </h2>
-                    <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-700 transition-colors">
-                        <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-hover transition-colors">
+                        <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
@@ -360,7 +369,7 @@ function ServicioModal({
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-5">
                     <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Nombre del Servicio</label>
+                        <label className="block text-sm font-medium text-muted mb-2">Nombre del Servicio</label>
                         <input
                             type="text"
                             value={formData.nombre}
@@ -373,7 +382,7 @@ function ServicioModal({
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">Duración (minutos)</label>
+                            <label className="block text-sm font-medium text-muted mb-2">Duración (minutos)</label>
                             <select
                                 value={formData.duracion_minutos}
                                 onChange={(e) => setFormData({ ...formData, duracion_minutos: e.target.value })}
@@ -389,9 +398,9 @@ function ServicioModal({
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">Precio (MXN)</label>
+                            <label className="block text-sm font-medium text-muted mb-2">Precio (MXN)</label>
                             <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
                                 <input
                                     type="number"
                                     min="0"
@@ -404,6 +413,21 @@ function ServicioModal({
                                 />
                             </div>
                         </div>
+                        <div>
+                            <label className="block text-sm font-medium text-muted mb-2">Costo Directo (MXN)</label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={formData.costo_directo}
+                                    onChange={(e) => setFormData({ ...formData, costo_directo: e.target.value })}
+                                    className="input-field pl-8"
+                                    placeholder="0.00"
+                                />
+                            </div>
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -412,14 +436,14 @@ function ServicioModal({
                             id="activo"
                             checked={formData.activo}
                             onChange={(e) => setFormData({ ...formData, activo: e.target.checked })}
-                            className="w-4 h-4 rounded bg-slate-700 border-slate-600 text-purple-600 focus:ring-purple-500"
+                            className="w-4 h-4 rounded bg-surface-hover border-slate-600 text-purple-600 focus:ring-purple-500"
                         />
-                        <label htmlFor="activo" className="text-sm text-slate-300">
+                        <label htmlFor="activo" className="text-sm text-muted">
                             Servicio disponible
                         </label>
                     </div>
 
-                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
+                    <div className="flex justify-end gap-3 pt-4 border-t border-border">
                         <button type="button" onClick={onClose} className="btn-secondary">
                             Cancelar
                         </button>

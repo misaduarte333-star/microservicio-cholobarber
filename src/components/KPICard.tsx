@@ -1,5 +1,8 @@
 'use client'
 
+/**
+ * Propiedades esperadas por el componente KPICard
+ */
 interface KPICardProps {
     titulo: string
     valor: number | string
@@ -9,6 +12,11 @@ interface KPICardProps {
     trendInverse?: boolean
 }
 
+/**
+ * Componente tipo Tarjeta (Card) utilizado en los dashboards para mostrar un 
+ * Indicador Clave de Rendimiento (KPI) con un ícono, título y color determinado.
+ * Puede mostrar tendencias porcentuales si se proveen.
+ */
 export function KPICard({ titulo, valor, color, icon, trend, trendInverse }: KPICardProps) {
     const colorConfig = {
         purple: {
@@ -92,13 +100,13 @@ export function KPICard({ titulo, valor, color, icon, trend, trendInverse }: KPI
                         >
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
                         </svg>
-                        {Math.abs(trend)}%
+                        {Math.abs(trend).toFixed(2)}%
                     </div>
                 )}
             </div>
 
-            <p className="text-slate-400 text-sm mb-1">{titulo}</p>
-            <p className="text-3xl font-bold text-white">{valor}</p>
+            <p className="text-muted-foreground text-sm mb-1">{titulo}</p>
+            <p className="text-3xl font-bold text-foreground">{valor}</p>
         </div>
     )
 }

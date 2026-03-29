@@ -1,11 +1,22 @@
 @import "tailwindcss";
 
 /* BarberCloud AI - Design System */
+@theme {
+  --color-background: var(--bg-primary);
+  --color-surface: var(--bg-secondary);
+  --color-surface-hover: var(--bg-tertiary);
+  --color-foreground: var(--text-primary);
+  --color-muted: var(--text-secondary);
+  --color-muted-foreground: var(--text-muted);
+  --color-border: var(--card-border);
+  --color-border-muted: var(--input-border);
+}
+
 :root {
-  /* Brand Colors */
-  --primary: #7c3aed; /* Purple */
-  --primary-dark: #5b21b6;
-  --primary-light: #a78bfa;
+  /* Brand Colors (Cholobarber Red/Black) */
+  --primary: #dc2626; /* red-600 */
+  --primary-dark: #991b1b;
+  --primary-light: #ef4444;
 
   --secondary: #f59e0b; /* Amber */
   --secondary-dark: #d97706;
@@ -18,6 +29,31 @@
   --status-completed: #6b7280;
   --status-cancelled: #ef4444;
   --status-no-show: #dc2626;
+
+  /* Light Theme Defaults (Cholobarber style) */
+  --bg-primary: #f8fafc; /* slate-50 */
+  --bg-secondary: #ffffff; /* white */
+  --bg-tertiary: #f1f5f9; /* slate-100 */
+
+  --text-primary: #0f172a; /* slate-900 */
+  --text-secondary: #1e293b; /* slate-800 - previously slate-700 */
+  --text-muted: #475569; /* slate-600 - previously slate-500 */
+
+  --card-bg: rgba(255, 255, 255, 1);
+  --card-border: rgba(0, 0, 0, 0.05);
+
+  --input-bg: #ffffff;
+  --input-border: #e2e8f0;
+
+  --gradient-brand: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.dark {
+  /* Brand Colors (Keep Purple for dark mode or use Red?) Let's keep red for consistency */
+  --primary: #7c3aed; /* Reverting to purple for dark mode since it was the original */
+  --primary-dark: #5b21b6;
+  --primary-light: #a78bfa;
+  --gradient-brand: linear-gradient(135deg, #a78bfa 0%, #c084fc 100%);
 
   /* Dark Theme Defaults */
   --bg-primary: #0f172a; /* Slate 900 */
@@ -33,8 +69,6 @@
 
   --input-bg: #1e293b;
   --input-border: #334155;
-  
-  --gradient-brand: linear-gradient(135deg, #a78bfa 0%, #c084fc 100%);
 }
 
 /* Base Styles */
@@ -61,7 +95,9 @@ body {
   backdrop-filter: blur(12px);
   border: 1px solid var(--card-border);
   border-radius: 1rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 /* Input Styles */
@@ -71,7 +107,7 @@ body {
   border: 1px solid var(--input-border);
   color: var(--text-primary);
   @apply placeholder:text-slate-500;
-  @apply focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20;
+  @apply focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20;
   @apply transition-all duration-200;
 }
 
@@ -86,16 +122,17 @@ body {
 /* Button Styles */
 .btn-primary {
   @apply px-6 py-3 rounded-xl font-semibold transition-all duration-300;
-  @apply bg-gradient-to-r from-purple-600 to-purple-500;
-  @apply hover:from-purple-500 hover:to-purple-400;
-  @apply hover:shadow-lg hover:shadow-purple-500/30;
+  background-color: var(--primary);
+  color: #ffffff;
+  @apply hover:brightness-110;
+  @apply hover:shadow-lg hover:shadow-[var(--primary)]/30;
   @apply active:scale-95;
 }
 
 .btn-secondary {
   @apply px-6 py-3 rounded-xl font-semibold transition-all duration-300;
-  @apply bg-slate-700 text-white;
-  @apply hover:bg-slate-600;
+  @apply bg-[var(--bg-tertiary)] text-[var(--text-primary)];
+  @apply hover:brightness-90 dark:hover:brightness-110;
   @apply active:scale-95;
 }
 
@@ -134,7 +171,7 @@ body {
 
 /* Glow Effects */
 .glow-purple {
-  box-shadow: 0 0 40px rgba(124, 58, 237, 0.4);
+  box-shadow: 0 0 40px var(--primary-light);
 }
 
 .glow-amber {
@@ -145,10 +182,10 @@ body {
 @keyframes pulse-glow {
   0%,
   100% {
-    box-shadow: 0 0 20px rgba(124, 58, 237, 0.4);
+    box-shadow: 0 0 20px var(--primary-light);
   }
   50% {
-    box-shadow: 0 0 40px rgba(124, 58, 237, 0.7);
+    box-shadow: 0 0 40px var(--primary);
   }
 }
 
@@ -186,18 +223,18 @@ body {
 
 /* Timeline Styles */
 .timeline-slot {
-  @apply relative border-l-2 border-slate-700 pl-4 py-2;
-  @apply hover:bg-slate-800/50 transition-colors duration-200;
+  @apply relative border-l-2 border-[var(--color-border)] pl-4 py-2;
+  @apply hover:bg-[var(--color-surface-hover)] transition-colors duration-200;
 }
 
 .timeline-slot::before {
   content: "";
   @apply absolute -left-[5px] top-1/2 -translate-y-1/2;
-  @apply w-2 h-2 rounded-full bg-slate-600;
+  @apply w-2 h-2 rounded-full bg-[var(--color-muted-foreground)];
 }
 
 .timeline-slot.has-appointment::before {
-  @apply bg-purple-500;
+  background-color: var(--primary);
 }
 
 /* Current Time Indicator */
@@ -227,7 +264,7 @@ body {
 
 /* Loading Spinner */
 .spinner {
-  @apply w-6 h-6 border-2 border-white/20 border-t-white rounded-full;
+  @apply w-6 h-6 border-2 border-[var(--primary)]/20 border-t-[var(--primary)] rounded-full;
   animation: spin 0.8s linear infinite;
 }
 
