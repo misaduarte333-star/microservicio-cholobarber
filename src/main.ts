@@ -10,6 +10,7 @@ import { MetricsController } from './modules/metrics/metrics.controller';
 import { MetricsService } from './modules/metrics/metrics.service';
 import { HealthService } from './modules/metrics/health.service';
 import { ProviderController } from './modules/config/provider.controller';
+import { ProviderService } from './modules/config/provider.service';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -125,6 +126,7 @@ const PORT = envConfig.PORT || 3000;
 
 const server = app.listen(PORT, async () => {
   logger.info({ port: PORT }, 'CholoBot Microservice iniciado');
+  await ProviderService.syncEnvFromRedis();
   await MetricsService.init();
   autoConfigureNgrokWebhook().catch(err =>
     logger.warn({ err }, 'autoConfigureNgrokWebhook falló')

@@ -37,6 +37,24 @@ const DEFAULTS: ProviderConfig = {
 export class ProviderService {
   private static redis = RedisService.getInstance();
 
+  // ── Init ──────────────────────────────────────────────────────────────────
+
+  /** Carga las API keys guardadas en Redis hacia process.env al arrancar.
+   *  Necesario porque LangChain lee los env vars directamente. */
+  static async syncEnvFromRedis(): Promise<void> {
+    const providers: ProviderName[] = ['openai', 'anthropic', 'google'];
+    await Promise.all(providers.map(async (provider) => {
+      try {
+        const key = await this.redis.get(`${REDIS_KEY_PREFIX}${provider}`);
+        if (key) {
+          if (provider === 'openai')    process.env.OPENAI_API_KEY    = key;
+          if (provider === 'anthropic') process.env.ANTHROPIC_API_KEY = key;
+          if (provider === 'google')    process.env.GOOGLE_API_KEY    = key;
+        }
+      } catch {}
+    }));
+  }
+
   // ── Config ────────────────────────────────────────────────────────────────
 
   static async getConfig(): Promise<ProviderConfig> {
@@ -59,9 +77,15 @@ export class ProviderService {
 
   // ── API Keys ───────────────────────────────────────────────────────────────
 
-  /** Guarda una API key en Redis. Tiene prioridad sobre la del .env */
+  /** Guarda una API key en Redis y actualiza process.env para que LangChain la tome de inmediato */
   static async saveApiKey(provider: ProviderName, key: string): Promise<void> {
     await this.redis.set(`${REDIS_KEY_PREFIX}${provider}`, key);
+    // LangChain lee los env vars directamente e ignora el parámetro openAIApiKey
+    // cuando el env var está definido. Actualizamos process.env para que surta efecto
+    // sin necesidad de redeploy.
+    if (provider === 'openai')    process.env.OPENAI_API_KEY    = key;
+    if (provider === 'anthropic') process.env.ANTHROPIC_API_KEY = key;
+    if (provider === 'google')    process.env.GOOGLE_API_KEY    = key;
   }
 
   /** Obtiene la API key: Redis primero, luego env var */
