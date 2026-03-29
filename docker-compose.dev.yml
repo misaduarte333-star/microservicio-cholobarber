@@ -1,0 +1,36 @@
+services:
+  ngrok:
+    image: ngrok/ngrok:latest
+    command: http cholobot-service:3001 --log stdout
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    ports:
+      - "4040:4040"
+    networks:
+      - migration_network
+    depends_on:
+      - cholobot-service
+    restart: unless-stopped
+
+  cholobot-service:
+    build:
+      context: .
+      target: builder
+    command: npm run dev
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - REDIS_URL=${REDIS_URL}
+      - DATABASE_URL=${DATABASE_URL}
+      - EVOLUTION_API_URL=${EVOLUTION_API_URL}
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-barberia}
+      - MOCK_MODE=false
+      - NGROK_API_URL=http://ngrok:4040
