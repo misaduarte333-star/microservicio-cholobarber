@@ -20,9 +20,7 @@ export interface RequestLog {
     source: 'webhook' | 'chat'
 }
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const supabase = createClient(supabaseUrl, supabaseServiceKey)
+import { getAISupabaseClient } from './tools/business.tools'
 
 export class MetricsService {
     /**
@@ -30,6 +28,7 @@ export class MetricsService {
      * No bloquea el hilo principal.
      */
     static record(log: RequestLog): void {
+        const supabase = getAISupabaseClient()
         supabase.from('request_logs').insert([{
             id: log.id,
             timestamp: log.timestamp,
@@ -41,7 +40,7 @@ export class MetricsService {
             tools_used: JSON.parse(JSON.stringify(log.toolsUsed)),
             error: log.error || null,
             source: log.source,
-        }]).then(({ error }) => {
+        }]).then(({ error }: { error: any }) => {
             if (error) console.error('[MetricsService] Error insertando log en Supabase:', error.message)
         })
     }
