@@ -1,0 +1,12 @@
+node_modules
+.env
+dist
+npm-debug.log
+.git
+.gemini
+test-webhook.js
+jest.config.js
+coverage
+.next
+temp*
+cholobot-core*

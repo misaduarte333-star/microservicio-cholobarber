@@ -13,6 +13,14 @@ out/
 
 # Production
 build
+dist/
+.next/
+out/
+.gemini/
+.claude/
+temp_*
+cholobot-core*
+external-barberia-app*
 
 # Misc
 .DS_Store

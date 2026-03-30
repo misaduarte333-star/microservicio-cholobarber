@@ -1,0 +1,121 @@
+services:
+  evolution-postgres:
+    image: postgres:15
+    container_name: evolution_postgres_migration
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-evouser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-evolutiondb}
+    volumes:
+      - evolution_postgres_data:/var/lib/postgresql/data
+    networks:
+      - migration_network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-evouser} -d ${POSTGRES_DB:-evolutiondb}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  evolution-redis:
+    image: redis:7
+    container_name: evolution_redis_migration
+    restart: always
+    # appendonly yes = persistencia AOF — sobrevive reinicios del contenedor
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes --appendfsync everysec
+    volumes:
+      - evolution_redis_data:/data
+    networks:
+      - migration_network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.1
+    container_name: evolution_api_migration
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER:-evouser}:${POSTGRES_PASSWORD}@evolution-postgres:5432/${POSTGRES_DB:-evolutiondb}
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://:${REDIS_PASSWORD}@evolution-redis:6379/6
+      - CACHE_REDIS_PREFIX_KEY=evolution
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+      - TZ=America/Mexico_City
+      - DOCKER_ENV=true
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks:
+      - migration_network
+    depends_on:
+      evolution-postgres:
+        condition: service_healthy
+      evolution-redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8080/ || exit 1" ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # --- El Microservicio CholoBot ---
+  cholobot-service:
+    build: .
+    container_name: cholobot_microservice
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - MOCK_MODE=false
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@evolution-redis:6379
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-evouser}:${POSTGRES_PASSWORD}@evolution-postgres:5432/${POSTGRES_DB:-evolutiondb}
+      - EVOLUTION_API_URL=${EVOLUTION_API_URL}
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-barberia}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      # Requeridos explícitos de la nueva arquitectura
+      - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_KEY}
+      - DASHBOARD_TOKEN=${DASHBOARD_TOKEN}
+      - AGENT_TIMEOUT_MS=${AGENT_TIMEOUT_MS:-45000}
+    networks:
+      - migration_network
+    depends_on:
+      evolution-api:
+        condition: service_healthy
+      evolution-redis:
+        condition: service_healthy
+      evolution-postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 128M
+
+# --- Configuración Compartida ---
+networks:
+  migration_network:
+    driver: bridge
+
+volumes:
+  evolution_instances:
+  evolution_postgres_data:
+  evolution_redis_data:

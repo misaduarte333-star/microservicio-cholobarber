@@ -114,21 +114,23 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
         schema: z.object({
             barbero_id: z.string().describe('UUID del barbero'),
             servicio_id: z.string().describe('UUID del servicio'),
+            cliente_id: z.string().describe('UUID del cliente (obtenido con BUSCAR_CLIENTE)'),
             cliente_nombre: z.string().describe('Nombre del cliente'),
             cliente_telefono: z.string().describe('Teléfono del cliente'),
             timestamp_inicio: z.string().describe('Inicio de la cita en ISO 8601 (ej: 2026-03-30T13:00:00)'),
             timestamp_fin: z.string().describe('Fin de la cita en ISO 8601 (ej: 2026-03-30T13:40:00)')
         }),
-        func: async ({ barbero_id, servicio_id, cliente_nombre, cliente_telefono, timestamp_inicio, timestamp_fin }) => {
+        func: async ({ barbero_id, servicio_id, cliente_id, cliente_nombre, cliente_telefono, timestamp_inicio, timestamp_fin }) => {
             try {
-                if (!barbero_id || !servicio_id || !cliente_nombre || !cliente_telefono || !timestamp_inicio || !timestamp_fin) {
+                if (!barbero_id || !servicio_id || !cliente_id || !cliente_nombre || !cliente_telefono || !timestamp_inicio || !timestamp_fin) {
                     return JSON.stringify({
                         status: 'error',
                         error: 'Faltan campos requeridos',
-                        campos_recibidos: { barbero_id, servicio_id, cliente_nombre, cliente_telefono, timestamp_inicio, timestamp_fin },
+                        campos_recibidos: { barbero_id, servicio_id, cliente_id, cliente_nombre, cliente_telefono, timestamp_inicio, timestamp_fin },
                         campos_faltantes: [
                             !barbero_id && 'barbero_id',
                             !servicio_id && 'servicio_id',
+                            !cliente_id && 'cliente_id',
                             !cliente_nombre && 'cliente_nombre',
                             !cliente_telefono && 'cliente_telefono',
                             !timestamp_inicio && 'timestamp_inicio',
@@ -143,6 +145,7 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
                     sucursal_id: sucursalId,
                     barbero_id,
                     servicio_id,
+                    cliente_id,
                     cliente_nombre,
                     cliente_telefono,
                     timestamp_inicio: new Date(timestamp_inicio).toISOString(),
@@ -154,7 +157,7 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
                 const { data, error } = await supabase
                     .from('citas')
                     .insert([insertPayload])
-                    .select('id, sucursal_id, barbero_id, servicio_id, cliente_nombre, cliente_telefono, timestamp_inicio, timestamp_fin, estado, origen')
+                    .select('id, sucursal_id, barbero_id, servicio_id, cliente_id, cliente_nombre, cliente_telefono, timestamp_inicio, timestamp_fin, estado, origen')
                     .single()
 
                 if (error) {

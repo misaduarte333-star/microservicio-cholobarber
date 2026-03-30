@@ -25,30 +25,17 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Sucursal no encontrada.' }, { status: 404 })
         }
 
-        const { data: configIa, error: globalError } = await supabase
-            .from('configuracion_ia_global')
-            .select('*')
-            .eq('id', 1)
-            .single()
+        // Usamos campos del nuevo esquema de sucursales
+        const provider = sucursal.llm_provider || 'openai'
+        const aiModel = sucursal.llm_model || (provider === 'openai' ? 'gpt-4o-mini' : '')
+        const apiKey = sucursal.llm_api_key || (
+            provider === 'openai' ? process.env.OPENAI_API_KEY :
+            provider === 'anthropic' ? process.env.ANTHROPIC_API_KEY :
+            process.env.GROQ_API_KEY
+        )
 
-        // configIa puede no existir aún — usamos env vars como fallback
-        const openaiKey = configIa?.openai_api_key || process.env.OPENAI_API_KEY || ''
-        const anthropicKey = configIa?.anthropic_api_key || process.env.ANTHROPIC_API_KEY || ''
-        const groqKey = configIa?.groq_api_key || process.env.GROQ_API_KEY || ''
-
-        if (!openaiKey && !anthropicKey && !groqKey) {
-            return NextResponse.json({ error: 'No hay ninguna API key configurada (ni en BD ni en .env).' }, { status: 500 })
-        }
-
-        const provider = sucursal.agent_provider || configIa?.default_provider || 'openai'
-        let aiModel = configIa?.openai_model || 'gpt-4o-mini'
-        
-        if (sucursal.agent_model) {
-            aiModel = sucursal.agent_model
-        } else {
-            if (provider === 'anthropic') aiModel = configIa?.anthropic_model || 'claude-3-5-sonnet-20240620'
-            if (provider === 'groq') aiModel = configIa?.groq_model || 'llama-3.1-70b-versatile'
-            if (provider === 'openai') aiModel = configIa?.openai_model || 'gpt-4o-mini'
+        if (!apiKey) {
+            return NextResponse.json({ error: `No hay una API key configurada para ${provider}.` }, { status: 500 })
         }
 
         const ctx: AgentContext = {
@@ -57,12 +44,12 @@ export async function POST(req: Request) {
             agentName: sucursal.agent_name || 'BarberBot',
             personality: sucursal.agent_personality || 'Friendly',
             timezone: 'America/Hermosillo',
-            customPrompt: sucursal.agent_prompt_override,
+            customPrompt: sucursal.agent_custom_prompt,
             aiProvider: provider as any,
             aiModel: aiModel,
-            openaiKey,
-            anthropicKey,
-            groqKey,
+            openaiKey: provider === 'openai' ? apiKey : process.env.OPENAI_API_KEY || '',
+            anthropicKey: provider === 'anthropic' ? apiKey : process.env.ANTHROPIC_API_KEY || '',
+            groqKey: provider === 'groq' ? apiKey : process.env.GROQ_API_KEY || '',
         }
 
         // Ejecutar Agente sin debouncer directo al Executor

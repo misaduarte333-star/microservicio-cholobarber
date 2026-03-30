@@ -50,14 +50,25 @@ export class AgentService {
 
         // 2. Pre-cargar datos estáticos del negocio (barberos, servicios, sucursal)
         const supabase = getAISupabaseClient()
-        const [barberosRes, serviciosRes, sucursalRes] = await Promise.all([
-            supabase.from('barberos').select('id, nombre, horario_laboral, bloqueo_almuerzo')
-                .eq('sucursal_id', ctx.sucursalId).eq('activo', true).order('nombre'),
-            supabase.from('servicios').select('id, nombre, duracion_minutos, precio')
-                .eq('sucursal_id', ctx.sucursalId).eq('activo', true).order('nombre'),
-            supabase.from('sucursales').select('nombre, direccion, telefono_whatsapp, horario_apertura')
-                .eq('id', ctx.sucursalId).single()
-        ])
+        let barberosRes, serviciosRes, sucursalRes
+        try {
+            [barberosRes, serviciosRes, sucursalRes] = await Promise.all([
+                supabase.from('barberos').select('id, nombre, horario_laboral, bloqueo_almuerzo')
+                    .eq('sucursal_id', ctx.sucursalId).eq('activo', true).order('nombre'),
+                supabase.from('servicios').select('id, nombre, duracion_minutos, precio')
+                    .eq('sucursal_id', ctx.sucursalId).eq('activo', true).order('nombre'),
+                supabase.from('sucursales').select('nombre, direccion, telefono_whatsapp, horario_apertura')
+                    .eq('id', ctx.sucursalId).single()
+            ])
+
+            if (barberosRes.error) throw new Error(`Error barberos: ${barberosRes.error.message}`)
+            if (serviciosRes.error) throw new Error(`Error servicios: ${serviciosRes.error.message}`)
+            if (sucursalRes.error) throw new Error(`Error sucursal data: ${sucursalRes.error.message}`)
+
+        } catch (dbError: any) {
+            console.error('[AgentService] DB Loading Error:', dbError.message)
+            throw new Error(`Error en base de datos al cargar contexto: ${dbError.message}`)
+        }
 
         // 3. Construir Prompt del Sistema con datos pre-cargados
         const systemPromptStr = buildSystemPrompt({

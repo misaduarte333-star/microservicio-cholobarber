@@ -9,13 +9,15 @@ const globalForPg = globalThis as unknown as {
 }
 
 const pool = globalForPg.pgPool ?? new Pool({
-    connectionString: process.env.AGENT_DB_URL,
-    max: 10,
+    connectionString: process.env.DATABASE_URL,
+    max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 3000
+    connectionTimeoutMillis: 2000,
 })
 
 if (process.env.NODE_ENV !== 'production') globalForPg.pgPool = pool
+
+export { pool }
 
 /**
  * Wrapper sobre el historial real para limitar mensajes y forzar la re-validación
@@ -90,7 +92,7 @@ export class MemoryService {
         const inner = new PostgresChatMessageHistory({
             sessionId,
             pool,
-            tableName: 'n8n_chat_histories' // Default del paquete de LangChain / Microservicio
+            tableName: 'n8n_chat_histories' // Tabla en PostgreSQL para el historial de mensajes
         })
 
         return new FreshContextHistory(inner, timezone)

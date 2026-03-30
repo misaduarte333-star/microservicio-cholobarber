@@ -197,14 +197,13 @@ function makeDisponibilidadBase(sucursalId: string, toolName: string, descriptio
                     return JSON.stringify({ error: 'Error al consultar barberos' })
                 }
 
-                // 2. Citas que se solapan
+                // 2. Citas ocupadas (Solo bloquean el slot donde COMIENZAN)
                 const { data: citasBusy } = await supabase
                     .from('citas')
                     .select('barbero_id')
                     .eq('sucursal_id', sucursalId)
                     .neq('estado', 'cancelada')
-                    .lt('timestamp_inicio', isoEnd)
-                    .gt('timestamp_fin', isoStart)
+                    .eq('timestamp_inicio', isoStart)
 
                 // 3. Bloqueos que se solapan
                 const { data: bloqueosBusy } = await supabase

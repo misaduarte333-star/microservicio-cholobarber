@@ -30,9 +30,9 @@ export class MetricsService {
      * No bloquea el hilo principal.
      */
     static record(log: RequestLog): void {
-        supabase.from('ia_request_logs').insert([{
+        supabase.from('request_logs').insert([{
             id: log.id,
-            sucursal_id: log.sucursalId,
+            timestamp: log.timestamp,
             session_id: log.sessionId,
             phone: log.phone,
             input_preview: log.inputPreview,

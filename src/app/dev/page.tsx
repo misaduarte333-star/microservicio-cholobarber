@@ -39,6 +39,8 @@ export default function DevPage() {
     const router = useRouter()
     const [tables, setTables] = useState<TableInfo[]>([])
     const [loadingTables, setLoadingTables] = useState(true)
+    const [health, setHealth] = useState<any>(null)
+    const [loadingHealth, setLoadingHealth] = useState(true)
     const [envInfo, setEnvInfo] = useState<{ key: string; value: string }[]>([])
 
     // Password Reset State (dev only resets admin passwords)
@@ -73,6 +75,22 @@ export default function DevPage() {
         ])
 
         const supabase = createClient()
+
+        // Fetch system health
+        const fetchHealth = async () => {
+            try {
+                const res = await fetch('/api/admin/health')
+                const data = await res.json()
+                setHealth(data)
+            } catch (err) {
+                console.error('Error fetching health:', err)
+            } finally {
+                setLoadingHealth(false)
+            }
+        }
+
+        fetchHealth()
+        const healthInterval = setInterval(fetchHealth, 30000)
 
         // Fetch table row counts
         const fetchTables = async () => {
@@ -301,21 +319,52 @@ export default function DevPage() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                     {/* Environment Status */}
-                    <div className="glass-card p-6">
+                    <div className="glass-card p-6 border-t-4 border-t-emerald-500">
                         <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                             <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                             </svg>
-                            Estado del Sistema
+                            Estado de Conectividad
                         </h2>
-                        <div className="space-y-3">
-                            {envInfo.map((item) => (
-                                <div key={item.key} className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-800/50">
-                                    <span className="text-sm text-slate-300 font-mono">{item.key}</span>
-                                    <span className="text-sm">{item.value}</span>
+                        {loadingHealth ? (
+                            <div className="flex items-center justify-center py-8">
+                                <div className="spinner w-6 h-6 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 gap-3">
+                                {[
+                                    { name: 'Redis', data: health?.redis },
+                                    { name: 'Postgres', data: health?.postgres },
+                                    { name: 'Supabase', data: health?.supabase },
+                                    { name: 'Evolution', data: health?.evolution },
+                                ].map((service) => (
+                                    <div key={service.name} className="p-3 rounded-xl bg-slate-900/50 border border-slate-700/50 flex flex-col gap-1">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{service.name}</span>
+                                            <div className={`w-2 h-2 rounded-full ${service.data?.status === 'up' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'}`} />
+                                        </div>
+                                        <div className="flex items-end justify-between mt-1">
+                                            <span className={`text-sm font-semibold ${service.data?.status === 'up' ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                {service.data?.status === 'up' ? 'ONLINE' : 'OFFLINE'}
+                                            </span>
+                                            {service.data?.status === 'up' && (
+                                                <span className="text-[10px] text-slate-500 font-mono">{service.data?.latency}ms</span>
+                                            )}
+                                        </div>
+                                        {service.data?.error && (
+                                            <div className="text-[9px] text-red-500/70 truncate mt-1 leading-tight" title={service.data.error}>
+                                                {service.data.error}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                                
+                                <div className="col-span-2 mt-2 pt-2 border-t border-slate-700/30 flex justify-between items-center text-[10px] text-slate-500">
+                                    <span>Última actualización:</span>
+                                    <span>{new Date(health?.timestamp).toLocaleTimeString()}</span>
                                 </div>
-                            ))}
-                        </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Database Tables */}

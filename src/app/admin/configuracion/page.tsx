@@ -20,6 +20,8 @@ export default function ConfiguracionPage() {
     const { theme, setTheme } = useTheme()
     
     const [sucursal, setSucursal] = useState<Sucursal | null>(null)
+    const [health, setHealth] = useState<any>(null)
+    const [loadingHealth, setLoadingHealth] = useState(true)
     const [formData, setFormData] = useState({
         nombre: '',
         direccion: '',
@@ -105,6 +107,24 @@ export default function ConfiguracionPage() {
         }
         cargarConfiguracion()
     }, [authLoading, sucursalId, cargarConfiguracion])
+
+    useEffect(() => {
+        const fetchHealth = async () => {
+            try {
+                const res = await fetch('/api/admin/health')
+                const data = await res.json()
+                setHealth(data)
+            } catch (err) {
+                console.error('Error fetching health:', err)
+            } finally {
+                setLoadingHealth(false)
+            }
+        }
+
+        fetchHealth()
+        const healthInterval = setInterval(fetchHealth, 30000)
+        return () => clearInterval(healthInterval)
+    }, [])
 
     /**
      * Envía las actualizaciones de configuración y horario a la base de datos.
@@ -363,23 +383,52 @@ export default function ConfiguracionPage() {
                     </div>
 
                     <div className="glass-card p-6 border-l-4 border-l-blue-500">
-                        <h3 className="text-sm font-bold text-foreground mb-2">Estado del Sistema</h3>
-                        <div className="space-y-2">
-                            <div className="flex justify-between text-xs">
-                                <span className="text-muted-foreground">Base de Datos</span>
-                                <span className="text-emerald-400 font-medium">Conectado</span>
+                        <h3 className="text-sm font-bold text-foreground mb-4 flex items-center justify-between">
+                            Estado del Sistema
+                            {!loadingHealth && (
+                                <span className="text-[10px] text-muted font-mono">{new Date(health?.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            )}
+                        </h3>
+                        {loadingHealth ? (
+                            <div className="flex justify-center py-4">
+                                <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
                             </div>
-                            <div className="flex justify-between text-xs">
-                                <span className="text-muted-foreground">Versión App</span>
-                                <span className="text-muted">v0.1.0</span>
+                        ) : (
+                            <div className="space-y-3">
+                                {[
+                                    { label: 'Redis', data: health?.redis },
+                                    { label: 'Postgres', data: health?.postgres },
+                                    { label: 'Supabase', data: health?.supabase },
+                                    { label: 'Evolution', data: health?.evolution },
+                                ].map((s) => (
+                                    <div key={s.label} className="flex flex-col gap-1">
+                                        <div className="flex justify-between text-[11px]">
+                                            <span className="text-muted-foreground">{s.label}</span>
+                                            <div className="flex items-center gap-2">
+                                                {s.data?.status === 'up' && (
+                                                    <span className="text-muted font-mono text-[9px]">{s.data.latency}ms</span>
+                                                )}
+                                                <span className={`font-bold transition-colors ${s.data?.status === 'up' ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                    {s.data?.status === 'up' ? 'OK' : 'ERROR'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {s.data?.error && (
+                                            <div className="text-[9px] text-red-500/60 truncate italic" title={s.data.error}>
+                                                {s.data.error}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                                
+                                <div className="pt-2 border-t border-border mt-2">
+                                    <div className="flex justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Versión App</span>
+                                        <span className="text-muted">v0.1.0</span>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="flex justify-between text-xs">
-                                <span className="text-muted-foreground">ID Sucursal</span>
-                                <code className="text-muted-foreground bg-background px-1 rounded truncate max-w-[120px]" title={sucursalId}>
-                                    {sucursalId || '---'}
-                                </code>
-                            </div>
-                        </div>
+                        )}
                     </div>
 
                     {/* Theme Toggler */}

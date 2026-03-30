@@ -48,6 +48,12 @@ export async function POST(req: Request) {
         let messageText = ''
         if (messageType === 'conversation' || messageType === 'extendedTextMessage') {
             messageText = payload.data.message?.conversation || payload.data.message?.extendedTextMessage?.text
+        } else if (messageType === 'audioMessage') {
+            const base64Audio = payload.data.message?.base64 || payload.data.message?.audioMessage?.base64
+            if (base64Audio) {
+                const { AudioTranscriberService } = await import('@/lib/ai/audio.service')
+                messageText = await AudioTranscriberService.transcribe(base64Audio)
+            }
         }
 
         // Si no hay texto (ej. fotos, audios no transcribibles) lo ignoramos por ahora
@@ -60,12 +66,12 @@ export async function POST(req: Request) {
         const { data: sucursal, error: branchError } = await supabase
             .from('sucursales')
             .select('*')
-            .eq('agent_instance_name', instanceName)
-            .eq('agent_enabled', true)
+            .eq('evolution_instance', instanceName)
+            .eq('agent_active', true)
             .single()
 
         if (branchError || !sucursal) {
-            console.warn(`[Webhook] Instancia ${instanceName} no configurada o agente inactivo.`)
+            console.warn(`[Webhook] Instancia ${instanceName} no configurada o agente inactivo en tabla sucursales.`)
             return NextResponse.json({ received: true })
         }
 
@@ -87,14 +93,14 @@ export async function POST(req: Request) {
 
         const sessionId = `${sucursal.id}:${senderPhone}`
         const apiBase = configIa.evolution_api_url.endsWith('/') ? configIa.evolution_api_url : `${configIa.evolution_api_url}/`
-        const evoToken = sucursal.agent_evolution_key || configIa.evolution_api_key
+        const evoToken = sucursal.evolution_key || configIa.evolution_api_key
         const evoEndpoint = `${apiBase}message/sendText/${instanceName}`
 
-        const provider = sucursal.agent_provider || configIa.default_provider || 'openai'
+        const provider = sucursal.llm_provider || configIa.default_provider || 'openai'
         let aiModel = configIa.openai_model || 'gpt-4o-mini' // default fallback
         
-        if (sucursal.agent_model) {
-            aiModel = sucursal.agent_model
+        if (sucursal.llm_model) {
+            aiModel = sucursal.llm_model
         } else {
             if (provider === 'anthropic') aiModel = configIa.anthropic_model || 'claude-3-5-sonnet-20240620'
             if (provider === 'groq') aiModel = configIa.groq_model || 'llama-3.1-70b-versatile'
@@ -112,10 +118,10 @@ export async function POST(req: Request) {
             context: {
                 sucursalId: sucursal.id,
                 nombre: sucursal.nombre,
-                agentName: sucursal.agent_name || 'BarberBot',
-                personality: sucursal.agent_personality || 'Friendly',
+                agentName: sucursal.agent_name || 'Asistente',
+                personality: sucursal.agent_personality || 'friendly',
                 timezone: 'America/Hermosillo',
-                customPrompt: sucursal.agent_prompt_override,
+                customPrompt: sucursal.agent_custom_prompt,
                 aiProvider: provider as any,
                 aiModel: aiModel,
                 openaiKey,
