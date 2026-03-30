@@ -72,11 +72,21 @@ export class TimeValidator {
         }
     }
 
+    static parseHoraPublic(horaStr: string): { h: number; m: number } {
+        return this.parseHora(horaStr)
+    }
+
+    static redondearPublic(h: number, m: number): { h: number; m: number } {
+        return this.redondear(h, m)
+    }
+
     private static parseHora(horaStr: string): { h: number; m: number } {
         let str = horaStr.toLowerCase().trim()
         const pm = str.includes('pm')
         const am = str.includes('am')
-        str = str.replace('pm', '').replace('am', '').trim()
+
+        // Limpiar de texto AM/PM y caracteres no numéricos excepto :
+        str = str.replace(/[pam.\s]/g, '')
 
         const parts = str.split(':')
         let h = parseInt(parts[0], 10)

@@ -3,6 +3,27 @@
 // Adaptado del AI_HANDOVER_SPEC.md del microservicio CholoBarber
 // ============================================================================
 
+export interface BarberData {
+    id: string
+    nombre: string
+    horario_laboral: Record<string, { inicio: string; fin: string }> | null
+    bloqueo_almuerzo?: { inicio: string; fin: string } | null
+}
+
+export interface ServiceData {
+    id: string
+    nombre: string
+    duracion_minutos: number
+    precio: number
+}
+
+export interface BranchData {
+    nombre: string
+    direccion: string | null
+    telefono_whatsapp: string | null
+    horario_apertura: Record<string, { inicio: string; fin: string }> | null
+}
+
 export interface PromptContext {
     nombre: string
     agentName: string
@@ -10,6 +31,9 @@ export interface PromptContext {
     timezone: string
     greeting?: string
     customPrompt?: string
+    barberos?: BarberData[]
+    servicios?: ServiceData[]
+    sucursal?: BranchData
 }
 
 const PERSONALITY_DESCRIPTIONS: Record<string, string> = {
@@ -19,9 +43,52 @@ const PERSONALITY_DESCRIPTIONS: Record<string, string> = {
     'Cholo':        'Sé cholo amigable y directo ✂️ 💈. Estilo barrial pero respetuoso. Sin Markdown, sin formalidades.'
 }
 
+const DAY_LABELS: Record<string, string> = {
+    lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles',
+    jueves: 'Jueves', viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo'
+}
+
+function formatBarberos(barberos: BarberData[]): string {
+    if (!barberos.length) return 'No hay barberos activos en este momento.'
+    return barberos.map(b => {
+        const dias = b.horario_laboral
+            ? Object.entries(b.horario_laboral)
+                .map(([dia, h]) => `${DAY_LABELS[dia] || dia}: ${h.inicio}-${h.fin}`)
+                .join(', ')
+            : 'Sin horario definido'
+        const almuerzo = b.bloqueo_almuerzo
+            ? ` | Descanso: ${b.bloqueo_almuerzo.inicio}-${b.bloqueo_almuerzo.fin}`
+            : ''
+        return `  ${b.nombre} (ID: ${b.id}): ${dias}${almuerzo}`
+    }).join('\n')
+}
+
+function formatServicios(servicios: ServiceData[]): string {
+    if (!servicios.length) return 'No hay servicios activos en este momento.'
+    return servicios.map(s =>
+        `  ${s.nombre}: $${s.precio} MXN, ${s.duracion_minutos} min (ID: ${s.id})`
+    ).join('\n')
+}
+
+function formatSucursal(suc: BranchData): string {
+    const lines: string[] = []
+    if (suc.nombre) lines.push(`  Nombre: ${suc.nombre}`)
+    if (suc.direccion) lines.push(`  Direccion: ${suc.direccion}`)
+    if (suc.telefono_whatsapp) lines.push(`  WhatsApp: ${suc.telefono_whatsapp}`)
+    if (suc.horario_apertura && Object.keys(suc.horario_apertura).length > 0) {
+        lines.push(`  Horario de apertura:`)
+        for (const [dia, h] of Object.entries(suc.horario_apertura)) {
+            lines.push(`    ${DAY_LABELS[dia] || dia}: ${h.inicio} - ${h.fin}`)
+        }
+    } else {
+        lines.push(`  Horario de apertura: No configurado. Usa la herramienta Consultar_Sucursal para obtenerlo.`)
+    }
+    return lines.join('\n')
+}
+
 /**
  * Construye el System Prompt basado en la configuración de la sucursal.
- * Incluye el protocolo de agendamiento del AI_HANDOVER_SPEC v2.
+ * Incluye datos pre-cargados de barberos, servicios y sucursal.
  */
 export function buildSystemPrompt(ctx: PromptContext): string {
     const personalityDesc = PERSONALITY_DESCRIPTIONS[ctx.personality] || ctx.personality
@@ -35,6 +102,21 @@ Estilo de comunicación: ${personalityDesc}
 ${greetingLine}
 
 ${ctx.customPrompt ? `INSTRUCCIONES PERSONALIZADAS DE ${ctx.nombre.toUpperCase()}:\n${ctx.customPrompt}\n` : ''}
+═══════════════════════════════════════════
+DATOS DEL NEGOCIO (pre-cargados, usa estos directamente)
+═══════════════════════════════════════════
+
+BARBEROS ACTIVOS:
+${ctx.barberos ? formatBarberos(ctx.barberos) : '(no disponible)'}
+
+SERVICIOS:
+${ctx.servicios ? formatServicios(ctx.servicios) : '(no disponible)'}
+
+SUCURSAL:
+${ctx.sucursal ? formatSucursal(ctx.sucursal) : '(no disponible)'}
+
+Usa estos datos para responder preguntas sobre barberos, servicios, precios, horarios y ubicacion.
+NO necesitas llamar herramientas para esta informacion. Ya la tienes aqui.
 
 ═══════════════════════════════════════════
 REGLAS ABSOLUTAS (no negociables)
@@ -58,15 +140,33 @@ Si el cliente ya dio su confirmación ("sí", "dale", "ándale", "ok"), EJECUTA 
 Pedir confirmación dos veces está PROHIBIDO.
 
 REGLA 4 — DATOS FRESCOS OBLIGATORIOS
-El historial de esta conversación puede estar desactualizado (el cliente puede escribir horas después).
+El historial de esta conversación puede estar desactualizado.
 CADA vez que se mencione una hora, DEBES llamar VALIDAR_HORA y luego DISPONIBILIDAD_HOY o DISPONIBILIDAD_OTRO_DIA.
-Nunca agendes basándote en una disponibilidad verificada en un turno anterior.
+Nunca agendes sin haber llamado a la herramienta de disponibilidad en el turno actual.
+NUNCA respondas sobre horarios, descansos o disponibilidad de barberos usando datos de memoria o contexto previo.
+SIEMPRE llama a las herramientas correspondientes para obtener datos en tiempo real.
+
+REGLA 5 — CLARIDAD EN INDISPONIBILIDAD
+Si la herramienta indica que los barberos están ocupados o fuera de turno (ej: domingo, día de descanso), NO digas que hay un "error".
+Explica claramente el motivo: "Luis no trabaja los domingos" o "Luis ya tiene cita a esa hora".
+Si NADIE está disponible, dile al cliente y ofrécele ver otros días.
+
+REGLA 6 — USA LOS DATOS PRE-CARGADOS
+Para barberos, servicios, precios y horarios del local, USA los datos de la seccion "DATOS DEL NEGOCIO" de este prompt.
+NO inventes datos que no esten ahi. Si un barbero no aparece en la lista, no existe.
+Para DISPONIBILIDAD en tiempo real (citas, bloqueos), SI debes llamar a las herramientas.
+
+REGLA 7 — HORARIO DE LA SUCURSAL
+NUNCA agendes una cita fuera del horario de apertura de la sucursal.
+Revisa el campo "Horario" en SUCURSAL arriba. Si el cliente pide una hora fuera de ese rango o un dia que la sucursal no abre, informale el horario correcto y pidele otra hora.
+Si la herramienta de disponibilidad devuelve "sucursal_cerrada: true", explica el motivo al cliente y ofrece alternativas dentro del horario.
+Solo ofrece barberos que trabajen en el horario solicitado. Si un barbero no labora ese dia o a esa hora, no lo ofrezcas.
 
 ═══════════════════════════════════════════
 RELOJ MAESTRO (inyectado cada turno)
 ═══════════════════════════════════════════
-Fecha actual: {current_date}
-Hora actual:  {current_time}
+Fecha actual (ISO): {current_date}
+Hora actual (24h):  {current_time}
 Zona horaria: ${ctx.timezone}
 Teléfono del cliente: {sender_phone}
 
@@ -78,13 +178,14 @@ PASO 1 — IDENTIFICAR NOMBRE
    Si no conoces el nombre del cliente, pregúntalo. Espera respuesta. No avances.
 
 PASO 2 — VALIDAR HORA (obligatorio)
-   Llama VALIDAR_HORA con la hora solicitada.
-   Si resultado = RECHAZADA, informa motivo y pide otra hora.
+   Llama VALIDAR_HORA con JSON: {"hora_solicitada":"HH:mm","fecha":"YYYY-MM-DD"}.
+   SIEMPRE incluir la fecha (hoy o la fecha solicitada). Si resultado = RECHAZADA, informa motivo y pide otra hora.
 
 PASO 3 — CONSULTAR DISPONIBILIDAD
    Llama DISPONIBILIDAD_HOY (si es hoy) o DISPONIBILIDAD_OTRO_DIA (si no es hoy).
-   Muestra TODOS los barberos: los disponibles (✅) y los ocupados (❌).
-   Si el cliente no especificó barbero, deja que elija de los disponibles.
+   Muestra el estado de los barberos relevantes. 
+   Si el barbero solicitado está ocupado o fuera de turno (mira el campo 'motivo' de la herramienta), explícalo claramente.
+   Si el cliente no especificó barbero, muestra las opciones disponibles.
 
 PASO 4 — CONFIRMAR
    Resume la cita: nombre cliente, barbero, servicio, hora.
@@ -95,16 +196,26 @@ PASO 5 — EJECUTAR
    Comunica el resultado: "¡Listo! Tu cita con [Barbero] quedó agendada para las [hora]."
 
 ═══════════════════════════════════════════
-HERRAMIENTAS DISPONIBLES
+HERRAMIENTAS DISPONIBLES (solo para datos en tiempo real)
 ═══════════════════════════════════════════
-- Consultar_Servicios: Precios, duración de servicios.
-- Consultar_Barberos: Lista de barberos activos.
-- Consultar_Sucursal: Dirección, horarios del local.
-- VALIDAR_HORA: Verificación de hora con 15+ min de anticipación.
-- DISPONIBILIDAD_HOY: Slots disponibles para HOY.
-- DISPONIBILIDAD_OTRO_DIA: Slots disponibles para fechas futuras.
+- VALIDAR_HORA: Verificación de hora. SIEMPRE pasar JSON con fecha y hora.
+  Input CORRECTO: {"hora_solicitada":"14:30","fecha":"{current_date}"} o {"hora_solicitada":"12:00","fecha":"2026-03-30"}
+  Si la cita es para otro dia (no hoy), SIEMPRE incluir la fecha de ese dia. Sin fecha, asume HOY.
+- DISPONIBILIDAD_HOY: Slots disponibles para HOY. Verifica citas existentes y bloqueos.
+  IMPORTANTE: El input DEBE ser un string con formato ISO sin zona horaria.
+  Input CORRECTO: "{current_date}T14:30:00" (string)
+  Input INCORRECTO: un objeto JSON vacío o sin hora.
+- DISPONIBILIDAD_OTRO_DIA: Slots disponibles para fechas futuras. Misma lógica que DISPONIBILIDAD_HOY.
+  Input CORRECTO: "2026-04-01T10:00:00" (string)
 - BUSCAR_CLIENTE: Busca o registra al cliente por teléfono.
 - MIS_CITAS: Citas activas del cliente.
 - AGENDAR_CITA: Inserta la cita en el sistema.
-- CANCELAR_CITA: Cancela una cita existente del cliente.`
+- CANCELAR_CITA: Cancela una cita existente del cliente.
+- Consultar_Sucursal: Consulta nombre, direccion, telefono y horario de apertura de la sucursal.
+- Consultar_Barberos: Lista barberos activos con sus horarios laborales.
+- Consultar_Servicios: Lista servicios activos con precios y duracion.
+
+NOTA: Los datos de barberos, servicios y sucursal normalmente ya estan en la seccion DATOS DEL NEGOCIO de este prompt.
+Si ves que alguno dice "No configurado" o no tiene datos, usa la herramienta correspondiente para consultarlos en tiempo real.
+Cuando el cliente pregunte por horarios de la sucursal, SIEMPRE responde con los datos de la seccion SUCURSAL arriba. Si no estan, llama Consultar_Sucursal.`
 }

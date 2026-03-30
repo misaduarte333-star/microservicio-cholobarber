@@ -97,12 +97,13 @@ export class DebouncerService {
             }
 
             // Llamar al LLM!
-            const output = await AgentService.run(sessionId, combinedText, phone, ctx)
+            const result = await AgentService.run(sessionId, combinedText, phone, ctx)
+            const output = result.response
             console.info(`[Debouncer] Agente Respondió a ${phone}: ${output.substring(0, 50)}...`)
 
             // 3. Persistir en caché por si falla el envío HTTPS
             await redis.set(unsentKey, JSON.stringify({ text: output, at: Date.now() }), 'EX', 3600)
-            
+
             // 4. Enviar a Evolution
             if (evoEndpoint && output) {
                 const sent = await this.sendEvolutionMessage(evoEndpoint, evoToken, remoteJid, output)

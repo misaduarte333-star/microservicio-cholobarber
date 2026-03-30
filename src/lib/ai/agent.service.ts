@@ -4,6 +4,7 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 
 import { buildSystemPrompt } from './prompts'
 import { makeAllTools } from './tools'
+import { getAISupabaseClient } from './tools/business.tools'
 import { MemoryService } from './memory.service'
 import { MetricsService } from './metrics.service'
 
@@ -22,24 +23,52 @@ export interface AgentContext {
     groqKey?: string | null
 }
 
+export interface AgentStep {
+    type: 'thinking' | 'tool_call' | 'tool_result' | 'response'
+    name?: string
+    input?: any
+    output?: any
+    timestamp: number
+    hasError?: boolean
+}
+
+export interface AgentRunResult {
+    response: string
+    steps: AgentStep[]
+}
+
 export class AgentService {
     public static async run(
         sessionId: string,
         input: string,
         senderPhone: string,
         ctx: AgentContext
-    ): Promise<string> {
+    ): Promise<AgentRunResult> {
         
         // 1. Instanciar herramientas aisladas para esta sucursal
         const tools = makeAllTools(ctx.sucursalId, ctx.timezone)
 
-        // 2. Construir Prompt del Sistema con la personalidad
+        // 2. Pre-cargar datos estáticos del negocio (barberos, servicios, sucursal)
+        const supabase = getAISupabaseClient()
+        const [barberosRes, serviciosRes, sucursalRes] = await Promise.all([
+            supabase.from('barberos').select('id, nombre, horario_laboral, bloqueo_almuerzo')
+                .eq('sucursal_id', ctx.sucursalId).eq('activo', true).order('nombre'),
+            supabase.from('servicios').select('id, nombre, duracion_minutos, precio')
+                .eq('sucursal_id', ctx.sucursalId).eq('activo', true).order('nombre'),
+            supabase.from('sucursales').select('nombre, direccion, telefono_whatsapp, horario_apertura')
+                .eq('id', ctx.sucursalId).single()
+        ])
+
+        // 3. Construir Prompt del Sistema con datos pre-cargados
         const systemPromptStr = buildSystemPrompt({
             nombre: ctx.nombre,
             agentName: ctx.agentName,
             personality: ctx.personality,
             timezone: ctx.timezone,
-            customPrompt: ctx.customPrompt || undefined
+            customPrompt: ctx.customPrompt || undefined,
+            barberos: barberosRes.data || [],
+            servicios: serviciosRes.data || [],
+            sucursal: sucursalRes.data || undefined
         })
 
         // 3. Crear LLM dinámico según el proveedor configurado
@@ -82,14 +111,14 @@ export class AgentService {
             const formatter = new Intl.DateTimeFormat('es-MX', { timeZone: ctx.timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
             const timeFormatter = new Intl.DateTimeFormat('es-MX', { timeZone: ctx.timezone, hour: '2-digit', minute: '2-digit', hour12: false })
 
-            const currentDate = formatter.format(new Date())
+            const currentDate = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone }) // YYYY-MM-DD
             const currentTime = timeFormatter.format(new Date())
 
             // Inyectar las variables de runtime al system prompt
             const finalSystemPrompt = systemPromptStr
-                .replace('{current_date}', currentDate)
-                .replace('{current_time}', currentTime)
-                .replace('{sender_phone}', senderPhone)
+                .replace(/{current_date}/g, currentDate)
+                .replace(/{current_time}/g, currentTime)
+                .replace(/{sender_phone}/g, senderPhone)
 
             // 6. Ejecutar el grafo con el historial previo
             const result = await agent.invoke({
@@ -100,12 +129,56 @@ export class AgentService {
                 ],
             })
 
-            // 7. Extraer la última respuesta del agente
+            // 7. Extraer la última respuesta y los pasos del agente
             const lastMessage = result.messages[result.messages.length - 1]
             const raw = lastMessage.content
             const outputText: string = (Array.isArray(raw)
                 ? raw.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('')
                 : String(raw)).trim()
+
+            // 7b. Recopilar pasos del agente para el panel de debug
+            const steps: AgentStep[] = []
+            for (const msg of result.messages) {
+                const msgType = msg._getType?.()
+                if (msgType === 'ai') {
+                    // Check for tool calls
+                    const toolCalls = (msg as any).tool_calls
+                    if (toolCalls && toolCalls.length > 0) {
+                        for (const tc of toolCalls) {
+                            steps.push({
+                                type: 'tool_call',
+                                name: tc.name,
+                                input: tc.args,
+                                timestamp: Date.now()
+                            })
+                        }
+                    } else if (msg === lastMessage) {
+                        steps.push({
+                            type: 'response',
+                            output: outputText,
+                            timestamp: Date.now()
+                        })
+                    }
+                } else if (msgType === 'tool') {
+                    let parsedContent: any
+                    let hasError = false
+                    const rawContent = String(msg.content)
+                    try {
+                        parsedContent = JSON.parse(rawContent)
+                        hasError = !!(parsedContent.error || parsedContent.status === 'error' || parsedContent.status === 'error_tecnico_db' || parsedContent.error_code)
+                    } catch {
+                        parsedContent = rawContent.substring(0, 1000)
+                        hasError = rawContent.toLowerCase().startsWith('error')
+                    }
+                    steps.push({
+                        type: 'tool_result',
+                        name: (msg as any).name ?? 'unknown',
+                        output: parsedContent,
+                        timestamp: Date.now(),
+                        hasError
+                    })
+                }
+            }
 
             // 8. Guardar el intercambio en el historial de Postgres
             await chatHistory.addUserMessage(input)
@@ -132,7 +205,7 @@ export class AgentService {
                 source: 'webhook'
             })
 
-            return outputText
+            return { response: outputText, steps }
 
         } catch (error: any) {
             console.error('[AgentService] Error:', error)

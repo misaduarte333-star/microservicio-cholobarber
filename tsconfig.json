@@ -35,6 +35,9 @@
         ".next/types/**/*.ts"
     ],
     "exclude": [
-        "node_modules"
+        "node_modules",
+        "temp_microservice",
+        "temp_microservice_old",
+        "test_avail.ts"
     ]
 }

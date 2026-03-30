@@ -54,7 +54,7 @@ export async function POST(req: Request) {
 
         const { data, error } = await supabase
             .from('configuracion_ia_global')
-            .upsert(input)
+            .upsert(input as any)
             .select()
             .single()
 

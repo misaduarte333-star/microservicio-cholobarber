@@ -73,7 +73,7 @@ export async function POST(req: Request) {
             ctx
         )
 
-        return NextResponse.json({ response: result })
+        return NextResponse.json({ response: result.response, steps: result.steps })
 
     } catch (e: any) {
         console.error('[API Chat Debug Error]', e.message)

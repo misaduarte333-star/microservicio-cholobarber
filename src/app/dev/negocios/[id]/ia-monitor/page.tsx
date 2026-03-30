@@ -2,13 +2,13 @@ import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 
 interface PageProps {
-    params: { id: string }
+    params: Promise<{ id: string }>
 }
 
 export const revalidate = 0 // always fetch live data from DB
 
 export default async function MonitorPage({ params }: PageProps) {
-    const { id: sucursalId } = params
+    const { id: sucursalId } = await params
 
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
