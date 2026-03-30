@@ -32,7 +32,7 @@ export default function RootLayout({
             <body suppressHydrationWarning className={`${inter.variable} antialiased bg-background text-foreground transition-colors`}>
                 <ThemeProvider
                     attribute="class"
-                    defaultTheme="light"
+                    defaultTheme="dark"
                     enableSystem={false}
                 >
                     <AuthProvider>
