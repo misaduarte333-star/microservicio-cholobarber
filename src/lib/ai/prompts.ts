@@ -21,7 +21,7 @@ export interface BranchData {
     nombre: string
     direccion: string | null
     telefono_whatsapp: string | null
-    horario_apertura: Record<string, { inicio: string; fin: string }> | null
+    horario_apertura: Record<string, any> | null
 }
 
 export interface PromptContext {
@@ -78,7 +78,9 @@ function formatSucursal(suc: BranchData): string {
     if (suc.horario_apertura && Object.keys(suc.horario_apertura).length > 0) {
         lines.push(`  Horario de apertura:`)
         for (const [dia, h] of Object.entries(suc.horario_apertura)) {
-            lines.push(`    ${DAY_LABELS[dia] || dia}: ${h.inicio} - ${h.fin}`)
+            const apertura = h.apertura || h.inicio || '??:??'
+            const cierre = h.cierre || h.fin || '??:??'
+            lines.push(`    ${DAY_LABELS[dia] || dia}: ${apertura} - ${cierre}`)
         }
     } else {
         lines.push(`  Horario de apertura: No configurado. Usa la herramienta Consultar_Sucursal para obtenerlo.`)
