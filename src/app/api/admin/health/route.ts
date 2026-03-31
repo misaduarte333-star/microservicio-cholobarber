@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { redis } from '@/lib/ai/debouncer.service'
 import { pool } from '@/lib/ai/memory.service'
 import { createClient } from '@/lib/supabase'
+import { EvolutionService } from '@/lib/evolution.service'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,12 +10,12 @@ export const dynamic = 'force-dynamic'
  * Endpoint de salud del sistema.
  * Verifica la conectividad y latencia de Redis, Postgres, Supabase y Evolution API.
  */
-export async function GET() {
+export async function GET(req: Request) {
     const results = {
         redis: { status: 'down', latency: 0, error: null as string | null },
         postgres: { status: 'down', latency: 0, error: null as string | null },
         supabase: { status: 'down', latency: 0, error: null as string | null },
-        evolution: { status: 'down', latency: 0, error: null as string | null },
+        evolution: { status: 'down', latency: 0, error: null as string | null, synced: false },
         timestamp: new Date().toISOString()
     }
 
@@ -50,25 +51,34 @@ export async function GET() {
         results.supabase.error = err.message
     }
 
-    // 4. Evolution API Check
+    // 4. Evolution API Check & Sync
     const startEvo = performance.now()
     try {
-        const evoUrl = process.env.EVOLUTION_API_URL || ''
-        const evoKey = process.env.EVOLUTION_API_KEY || ''
-        
-        // Intentamos llamar a un endpoint ligero o simplemente al base
-        const response = await fetch(`${evoUrl}/instance/fetchInstances`, {
-            method: 'GET',
-            headers: { 'apikey': evoKey },
-            // Timeout corto para no bloquear el dashboard
-            signal: AbortSignal.timeout(5000)
-        })
-        
-        if (response.ok) {
-            results.evolution.status = 'up'
-            results.evolution.latency = Math.round(performance.now() - startEvo)
+        // Intentamos sincronizar el webhook de forma proactiva usando la URL de esta petición
+        const syncRes = await EvolutionService.syncWebhook(req.url)
+        results.evolution.synced = syncRes.success
+
+        const supabase = createClient()
+        const { data: config } = await supabase.from('configuracion_ia_global').select('evolution_api_url, evolution_api_key').eq('id', 1).single()
+
+        if (config && config.evolution_api_url) {
+            const evoUrl = config.evolution_api_url
+            const evoKey = config.evolution_api_key
+
+            const response = await fetch(`${evoUrl}/instance/fetchInstances`, {
+                method: 'GET',
+                headers: { 'apikey': evoKey },
+                signal: AbortSignal.timeout(5000)
+            })
+
+            if (response.ok) {
+                results.evolution.status = 'up'
+                results.evolution.latency = Math.round(performance.now() - startEvo)
+            } else {
+                results.evolution.error = `HTTP Error ${response.status}`
+            }
         } else {
-            results.evolution.error = `HTTP Error ${response.status}`
+            results.evolution.error = 'No Evolution Config in DB'
         }
     } catch (err: any) {
         results.evolution.error = err.message
