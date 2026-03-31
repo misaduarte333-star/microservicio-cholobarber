@@ -106,7 +106,7 @@ export class DebouncerService {
 
             // 4. Enviar a Evolution
             if (evoEndpoint && output) {
-                const sent = await this.sendEvolutionMessage(evoEndpoint, evoToken, remoteJid, output)
+                const sent = await this.sendEvolutionMessage(evoEndpoint, evoToken, phone, output)
                 if (sent) {
                     await redis.del(unsentKey) // LLegó correctamente
                 } else {
@@ -132,8 +132,7 @@ export class DebouncerService {
                 headers: { 'Content-Type': 'application/json', 'apikey': token },
                 body: JSON.stringify({
                     number: jid,
-                    options: { delay: 1200 },
-                    textMessage: { text }
+                    text: text
                 })
             })
             return res.ok

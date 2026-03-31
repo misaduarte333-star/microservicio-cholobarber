@@ -94,6 +94,12 @@ export class TimeValidator {
 
         if (pm && h < 12) h += 12
         if (am && h === 12) h = 0
+
+        // Heurística de negocio: 1-10 sin am/pm se asumen PM (horario de barbería).
+        if (!pm && !am) {
+            if (h >= 1 && h <= 10) h += 12
+        }
+
         if (h > 23) h = 0
 
         return { h, m }
