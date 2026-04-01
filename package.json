@@ -7,7 +7,8 @@
     "dev:lan": "next dev --turbopack -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "gen:types": "npx supabase gen types typescript --project-id zzkryfmfoucxxmimrhyh > src/lib/types.generated.ts"
   },
   "dependencies": {
     "@langchain/anthropic": "^1.3.25",
