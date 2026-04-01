@@ -8,14 +8,13 @@ export class EvolutionService {
     public static async syncWebhook(appUrl: string): Promise<{ success: boolean; message: string }> {
         try {
             const supabase = createClient()
-
-            // 1. Obtener configuración global
-            const { data, error } = await supabase
+            // 1. Obtener configuración global de la tabla que creamos
+            const { data: config, error } = await supabase
                 .from('configuracion_ia_global')
                 .select('*')
                 .eq('id', 1)
                 .single()
-            const config = data as any
+
 
             if (error || !config || !config.evolution_api_url) {
                 return { success: false, message: 'Falta configuración global de Evolution en Supabase.' }
@@ -24,11 +23,11 @@ export class EvolutionService {
             const evoBaseUrl = config.evolution_api_url.endsWith('/') ? config.evolution_api_url : `${config.evolution_api_url}/`
             const apikey = config.evolution_api_key
             const instance = process.env.EVOLUTION_INSTANCE || 'barberia'
-
-            // Priorizar variable de entorno para la URL base (Webhook)
-            // Si no está definida, extraemos el origin de la petición dinámica
-            const publicUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL
-            const baseUrl = publicUrl ? new URL(publicUrl).origin : new URL(appUrl).origin
+            // Priorizar variable de entorno pública en lugar de la URL interna del contenedor
+            // (dentro de Docker/EasyPanel, req.url puede resolver a 0.0.0.0 o a localhost)
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+                || process.env.APP_URL
+                || (() => { try { return new URL(appUrl).origin } catch { return appUrl } })()
             const webhookUrl = `${baseUrl}/api/webhook/evolution`
 
             console.log(`[EvolutionSync] Verificando webhook para instancia ${instance} -> ${webhookUrl}`)
@@ -49,7 +48,7 @@ export class EvolutionService {
                         needsUpdate = false
                     }
                 } catch (e) {
-                    console.warn('[EvolutionSync] No se pudieron leer webhooks existentes.')
+                    console.warn('[EvolutionSync] No se pudieron leer webhooks existentes, se procederá a actualizar.')
                 }
             }
 
@@ -57,12 +56,12 @@ export class EvolutionService {
                 return { success: true, message: 'Webhook ya está correctamente configurado.' }
             }
 
-            // 3. Establecer/Actualizar Webhook
+            // 3. Establecer/Actualizar Webhook (Usando el formato de objeto anidado que funciona)
             const setRes = await fetch(`${evoBaseUrl}webhook/set/${instance}`, {
                 method: 'POST',
-                headers: {
+                headers: { 
                     'Content-Type': 'application/json',
-                    apikey
+                    apikey 
                 },
                 body: JSON.stringify({
                     webhook: {
@@ -79,10 +78,11 @@ export class EvolutionService {
                 throw new Error(`Error Evolution API: ${setRes.status} - ${errData}`)
             }
 
+            console.log(`[EvolutionSync] Webhook sincronizado exitosamente en ${instance}`)
             return { success: true, message: 'Webhook sincronizado exitosamente.' }
 
         } catch (error: any) {
-            console.error('[EvolutionSync] Error:', error.message)
+            console.error('[EvolutionSync] Error catastrófico:', error.message)
             return { success: false, message: error.message }
         }
     }

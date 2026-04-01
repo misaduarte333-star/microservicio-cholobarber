@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { headers } from 'next/headers'
 import { redis } from '@/lib/ai/debouncer.service'
 import { pool } from '@/lib/ai/memory.service'
 import { createClient } from '@/lib/supabase'
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic'
  * Endpoint de salud del sistema.
  * Verifica la conectividad y latencia de Redis, Postgres, Supabase y Evolution API.
  */
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
     const results = {
         redis: { status: 'down', latency: 0, error: null as string | null },
         postgres: { status: 'down', latency: 0, error: null as string | null },
@@ -54,13 +55,21 @@ export async function GET(req: Request) {
     // 4. Evolution API Check & Sync
     const startEvo = performance.now()
     try {
-        // Intentamos sincronizar el webhook de forma proactiva usando la URL de esta petición
-        const syncRes = await EvolutionService.syncWebhook(req.url)
+        // Detectar URL pública real del microservicio desde cabeceras del proxy (Traefik/Nginx en EasyPanel)
+        // Esto evita que Next.js herede la URL interna del contenedor (0.0.0.0 / localhost)
+        const headersList = await headers()
+        const forwardedHost = headersList.get('x-forwarded-host')
+        const forwardedProto = headersList.get('x-forwarded-proto') || 'https'
+        const appUrlForSync = process.env.NEXT_PUBLIC_APP_URL
+            || process.env.APP_URL
+            || (forwardedHost ? `${forwardedProto}://${forwardedHost}` : req.url)
+
+        console.log(`[Health] Sincronizando webhook con URL base: ${appUrlForSync}`)
+        const syncRes = await EvolutionService.syncWebhook(appUrlForSync)
         results.evolution.synced = syncRes.success
 
         const supabase = createClient()
-        const { data } = await supabase.from('configuracion_ia_global').select('evolution_api_url, evolution_api_key').eq('id', 1).single()
-        const config = data as any
+        const { data: config } = await supabase.from('configuracion_ia_global').select('evolution_api_url, evolution_api_key').eq('id', 1).single()
 
         if (config && config.evolution_api_url) {
             const evoUrl = config.evolution_api_url
