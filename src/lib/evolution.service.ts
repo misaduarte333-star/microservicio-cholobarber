@@ -9,12 +9,12 @@ export class EvolutionService {
         try {
             const supabase = createClient()
             // 1. Obtener configuración global de la tabla que creamos
-            const { data: config, error } = await supabase
+            const { data, error } = await supabase
                 .from('configuracion_ia_global')
                 .select('*')
                 .eq('id', 1)
                 .single()
-
+            const config = data as any
 
             if (error || !config || !config.evolution_api_url) {
                 return { success: false, message: 'Falta configuración global de Evolution en Supabase.' }
