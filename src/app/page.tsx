@@ -77,10 +77,10 @@ export default function LoginPage() {
                             </svg>
                         </div>
                         <h1 className="text-2xl font-bold">
-                            <span className="gradient-text">BarberCloud</span>{' '}
-                            <span className="text-white">AI</span>
+                            <span className="gradient-text">BotDynamic</span>{' '}
+                            <span className="text-white">Dev</span>
                         </h1>
-                        <p className="text-slate-400 mt-2 text-sm">Inicia sesión para continuar</p>
+                        <p className="text-slate-400 mt-2 text-sm">Panel de desarrollo y gestión de negocios</p>
                     </div>
 
                     {/* Form */}
@@ -154,7 +154,7 @@ export default function LoginPage() {
 
                 {/* Footer */}
                 <p className="text-center text-slate-600 text-xs mt-6">
-                    BarberCloud AI &copy; {new Date().getFullYear()}
+                    BotDynamic &copy; {new Date().getFullYear()}
                 </p>
             </div>
         </div>

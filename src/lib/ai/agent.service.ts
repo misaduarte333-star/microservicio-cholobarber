@@ -35,6 +35,7 @@ export interface AgentStep {
 export interface AgentRunResult {
     response: string
     steps: AgentStep[]
+    systemPrompt?: string
 }
 
 export class AgentService {
@@ -216,7 +217,7 @@ export class AgentService {
                 source: 'webhook'
             })
 
-            return { response: outputText, steps }
+            return { response: outputText, steps, systemPrompt: finalSystemPrompt }
 
         } catch (error: any) {
             console.error('[AgentService] Error:', error)

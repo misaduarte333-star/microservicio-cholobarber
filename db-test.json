@@ -1,0 +1,22 @@
+{
+  "global": {
+    "evolution_api_url": "https://cholobot-evolution.ada8bf.easypanel.host",
+    "evolution_api_key": "123456.+az1"
+  },
+  "sucursales": [
+    {
+      "id": "f07a7640-9d86-499f-a048-24109345787a",
+      "nombre": "Cholo Barber",
+      "evolution_instance": "barberia",
+      "evolution_key": null,
+      "agent_active": true
+    },
+    {
+      "id": "d5ad3020-2419-4d53-bf36-64ac201c3848",
+      "nombre": "Nails",
+      "evolution_instance": null,
+      "evolution_key": null,
+      "agent_active": false
+    }
+  ]
+}

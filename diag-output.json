@@ -1,0 +1,36 @@
+{
+  "webhookActual": {
+    "id": "cmn9h30vt01x9nr4jnehrfqbk",
+    "url": "https://0.0.0.0:3001/api/webhook/evolution",
+    "headers": null,
+    "enabled": true,
+    "events": [
+      "MESSAGES_UPSERT"
+    ],
+    "webhookByEvents": false,
+    "webhookBase64": false,
+    "createdAt": "2026-03-27T22:28:14.010Z",
+    "updatedAt": "2026-04-01T01:13:32.133Z",
+    "instanceId": "d60a7821-b534-464e-8068-c12ee1a7d10b"
+  },
+  "webhookUpdate": {
+    "status": 201,
+    "data": {
+      "id": "cmn9h30vt01x9nr4jnehrfqbk",
+      "url": "http://18.216.112.9:3001/api/webhook/evolution",
+      "headers": null,
+      "enabled": true,
+      "events": [
+        "MESSAGES_UPSERT"
+      ],
+      "webhookByEvents": false,
+      "webhookBase64": false,
+      "createdAt": "2026-03-27T22:28:14.010Z",
+      "updatedAt": "2026-04-01T01:13:34.149Z",
+      "instanceId": "d60a7821-b534-464e-8068-c12ee1a7d10b"
+    }
+  },
+  "healthCheck": {
+    "error": "The operation was aborted due to timeout"
+  }
+}

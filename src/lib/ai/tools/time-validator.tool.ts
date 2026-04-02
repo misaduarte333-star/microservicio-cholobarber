@@ -13,10 +13,15 @@ export interface TimeValidatorOutput {
 }
 
 export class TimeValidator {
+    static readonly HORA_APERTURA = 9  // 9 AM
+    static readonly HORA_CIERRE = 20   // 8 PM
+
     static validate(input: TimeValidatorInput): TimeValidatorOutput {
         const horaActualStr = input.hora_actual
         const horaSolicitadaStr = input.hora_solicitada
 
+        console.log('[TimeValidator] validate input:', { horaActualStr, horaSolicitadaStr })
+        
         const [hAct, mAct] = horaActualStr.split(':').map(Number)
         const actualMin = hAct * 60 + mAct
 
@@ -25,21 +30,24 @@ export class TimeValidator {
         const hF = r.h
         const mF = r.m
 
+        console.log('[TimeValidator] parsed:', { h: p.h, m: p.m }, 'rounded:', { hF, mF }, 'actualMin:', actualMin, 'solicitadaMin:', hF * 60 + mF)
+
         const solicitadaMin = hF * 60 + mF
-        const diff = solicitadaMin - actualMin
+        
+        const esHoraValidaParaHoy = this.esHoraValidaEnHorario(hF, mF, actualMin)
 
         let status: 'VALIDA' | 'RECHAZADA' = 'VALIDA'
         let motivo: 'ok' | 'pasada' | 'menos_15' | 'justo' = 'ok'
         let advertencia = false
         let siguiente: string | null = null
 
-        if (diff < 0) {
+        if (!esHoraValidaParaHoy) {
             status = 'RECHAZADA'
             motivo = 'pasada'
-        } else if (diff < 15) {
+        } else if (solicitadaMin - actualMin < 15) {
             status = 'RECHAZADA'
             motivo = 'menos_15'
-        } else if (diff <= 30) {
+        } else if (solicitadaMin - actualMin <= 30) {
             advertencia = true
             motivo = 'justo'
         }
@@ -95,9 +103,12 @@ export class TimeValidator {
         if (pm && h < 12) h += 12
         if (am && h === 12) h = 0
 
-        // Heurística de negocio: 1-10 sin am/pm se asumen PM (horario de barbería).
-        if (!pm && !am) {
-            if (h >= 1 && h <= 10) h += 12
+        // Heurística: si no especifica AM/PM y la hora es 1-10
+        // Asumir AM si la hora actual es AM, o si la hora solicitada < hora actual
+        // Esto evita el bug de convertir "10" a "22:00" cuando el usuario quiere 10 AM
+        if (!pm && !am && h >= 1 && h <= 10) {
+            // Mantener como AM (no sumar 12)
+            // La lógica de negocio decidirá si es AM o PM basado en el contexto
         }
 
         if (h > 23) h = 0
@@ -124,5 +135,19 @@ export class TimeValidator {
 
     private static formatHora24(h: number, m: number): string {
         return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+    }
+
+    private static esHoraValidaEnHorario(hSolicitada: number, mSolicitada: number, actualMin: number): boolean {
+        const solicitadaMin = hSolicitada * 60 + mSolicitada
+
+        if (actualMin >= this.HORA_APERTURA * 60 && actualMin < this.HORA_CIERRE * 60) {
+            return solicitadaMin >= actualMin && solicitadaMin < this.HORA_CIERRE * 60
+        }
+
+        if (actualMin >= this.HORA_CIERRE * 60) {
+            return solicitadaMin >= this.HORA_APERTURA * 60
+        }
+
+        return solicitadaMin >= this.HORA_APERTURA * 60 && solicitadaMin < this.HORA_CIERRE * 60
     }
 }

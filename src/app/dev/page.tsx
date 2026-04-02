@@ -236,7 +236,7 @@ export default function DevPage() {
                             </svg>
                         </div>
                         <div>
-                            <h1 className="font-bold text-white text-lg">BarberCloud <span className="text-emerald-400">Dev</span></h1>
+                            <h1 className="font-bold text-white text-lg">BotDynamic <span className="text-emerald-400">Dev</span></h1>
                             <p className="text-xs text-slate-400">Panel de desarrollador</p>
                         </div>
                     </div>
@@ -269,36 +269,6 @@ export default function DevPage() {
                             <p className="text-xs text-slate-400">Crear y gestionar clientes</p>
                         </div>
                     </Link>
-
-                    <button
-                        onClick={() => navigateAsDevAdmin('/admin')}
-                        className="glass-card p-5 flex items-center gap-4 hover:scale-[1.02] transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/10 group text-left"
-                    >
-                        <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center group-hover:bg-amber-500/30 transition-colors">
-                            <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                            </svg>
-                        </div>
-                        <div>
-                            <h3 className="font-semibold text-white">Panel Admin</h3>
-                            <p className="text-xs text-slate-400">BarberCloud Principal (Dev)</p>
-                        </div>
-                    </button>
-
-                    <button
-                        onClick={() => navigateAsDevAdmin('/tablet')}
-                        className="glass-card p-5 flex items-center gap-4 hover:scale-[1.02] transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/10 group text-left"
-                    >
-                        <div className="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center group-hover:bg-purple-500/30 transition-colors">
-                            <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                            </svg>
-                        </div>
-                        <div>
-                            <h3 className="font-semibold text-white">Vista Tablet</h3>
-                            <p className="text-xs text-slate-400">BarberCloud Principal (Dev)</p>
-                        </div>
-                    </button>
 
                     <Link
                         href="/api/auth/login"

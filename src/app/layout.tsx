@@ -11,10 +11,10 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-    title: 'BarberCloud AI',
-    description: 'Sistema inteligente de gestión de citas para barberías',
+    title: 'BotDynamic - Gestión Inteligente',
+    description: 'Sistema inteligente de gestión de citas y agente IA para barberías',
     keywords: ['barbería', 'citas', 'gestión', 'IA', 'WhatsApp'],
-    authors: [{ name: 'BarberCloud' }],
+    authors: [{ name: 'BotDynamic' }],
 }
 
 /**

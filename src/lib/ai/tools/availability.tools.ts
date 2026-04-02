@@ -14,8 +14,11 @@ export const makeValidarHoraTool = (timezone: string = 'America/Hermosillo') => 
     return new DynamicStructuredTool({
         name: 'VALIDAR_HORA',
         description:
-            'Valida si una hora solicitada es válida. Solo aplica restriccion de 15 min si la cita es para HOY. ' +
-            'SIEMPRE llamar antes de consultar disponibilidad.',
+            'OBLIGATORIO: Llama esta herramienta cada vez que el cliente mencione una hora (10am, 2pm, 9, 12, "las 8", etc). ' +
+            'Devuelve si la hora es válida para agendar hoy. ' +
+            'Entrada: {"hora_solicitada": "10:00", "fecha": "2026-03-31"}. ' +
+            'Ejemplos de hora_solicitada: "10:00", "14:30", "9", "12pm", "3pm", "15", "las 8". ' +
+            'SIEMPRE incluye la fecha en formato YYYY-MM-DD.',
         schema: z.object({
             hora_solicitada: z.string().optional().describe('Hora solicitada (ej: "14:30", "3pm", "15:00")'),
             fecha: z.string().optional().describe('Fecha en formato YYYY-MM-DD (ej: "2026-03-30")'),
@@ -61,14 +64,31 @@ export const makeValidarHoraTool = (timezone: string = 'America/Hermosillo') => 
                     })
                 }
 
+                const tz = timezone || 'America/Hermosillo'
                 const formatter = new Intl.DateTimeFormat('es-MX', {
-                    timeZone: timezone,
-                    hour: '2-digit',
+                    timeZone: tz,
+                    hour: 'numeric',
                     minute: '2-digit',
-                    hour12: false
+                    hour12: false,
+                    hourCycle: 'h23'
                 })
-                const hora_actual = formatter.format(new Date())
+                let hora_actual = formatter.format(new Date())
+                
+                // Fallback: si la hora no tiene formato HH:mm, usar el timezone del sistema
+                if (!hora_actual.includes(':')) {
+                    const fallbackFormatter = new Intl.DateTimeFormat('es-MX', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    })
+                    hora_actual = fallbackFormatter.format(new Date())
+                }
+                
+                // Debug: log what we're comparing
+                console.log('[VALIDAR_HORA] timezone:', tz, 'hora_actual:', hora_actual, 'hora_solicitada:', hora, 'parsed:', TimeValidator.parseHoraPublic(hora))
+                
                 const result = TimeValidator.validate({ hora_actual, hora_solicitada: hora })
+                console.log('[VALIDAR_HORA] result:', result)
                 return JSON.stringify(result)
             } catch (error: any) {
                 return JSON.stringify({ status: 'error', message: error.message })

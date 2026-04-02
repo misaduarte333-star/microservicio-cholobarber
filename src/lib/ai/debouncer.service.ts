@@ -127,6 +127,7 @@ export class DebouncerService {
 
     private async sendEvolutionMessage(endpoint: string, token: string, jid: string, text: string): Promise<boolean> {
         try {
+            console.log(`[Debouncer] Enviando mensaje a Evolution API: ${endpoint} | Contacto: ${jid}`);
             const res = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'apikey': token },
@@ -134,16 +135,22 @@ export class DebouncerService {
                     number: jid,
                     text: text
                 })
-            })
-            return res.ok
-        } catch {
-            return false
+            });
+            if (!res.ok) {
+                const errText = await res.text();
+                console.error(`[Evolution API Error] sendText failed. Status: ${res.status}, Body: ${errText}`);
+                return false;
+            }
+            return true;
+        } catch (error: any) {
+            console.error(`[Evolution Net Error] Catch exception sending to Evolution: ${error.message}`);
+            return false;
         }
     }
 
     private async sendEvolutionPresence(endpoint: string, token: string, jid: string, presence: string): Promise<boolean> {
         try {
-            await fetch(endpoint, {
+            const res = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'apikey': token },
                 body: JSON.stringify({
@@ -151,9 +158,15 @@ export class DebouncerService {
                     presence,
                     delay: 5000
                 })
-            })
-            return true
-        } catch { return false }
+            });
+            if (!res.ok) {
+                console.error(`[Evolution API Error] sendPresence failed: ${res.status}`);
+            }
+            return res.ok;
+        } catch (err: any) { 
+            console.error(`[Evolution Net Error] sendPresence exception: ${err.message}`);
+            return false; 
+        }
     }
 }
 
