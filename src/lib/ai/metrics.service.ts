@@ -29,9 +29,9 @@ export class MetricsService {
      */
     static record(log: RequestLog): void {
         const supabase = getAISupabaseClient()
-        supabase.from('request_logs').insert([{
+        supabase.from('ia_request_logs').insert([{
             id: log.id,
-            timestamp: log.timestamp,
+            sucursal_id: log.sucursalId,
             session_id: log.sessionId,
             phone: log.phone,
             input_preview: log.inputPreview,
