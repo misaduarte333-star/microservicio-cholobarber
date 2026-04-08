@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { Code, Clock, Zap } from 'lucide-react'
 import { buildSystemPrompt } from '@/lib/ai/prompts'
+import ClearHistoryButton from '@/components/dev/ClearHistoryButton'
+import RealtimeLogListener from '@/components/dev/RealtimeLogListener'
 
 interface PageProps {
     params: Promise<{ id: string }>
@@ -143,6 +145,7 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
 
     return (
         <div className="h-screen bg-slate-900 flex flex-col overflow-hidden">
+            <RealtimeLogListener sucursalId={sucursalId} />
             {/* Header */}
             <header className="border-b border-slate-700/50 bg-slate-800/90 sticky top-0 z-20 backdrop-blur-md shrink-0">
                 <div className="max-w-full px-6 py-3 flex items-center justify-between">
@@ -252,6 +255,9 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
                                 <div>
                                     <p className="text-white font-mono font-semibold text-sm">{activeConv.phone}</p>
                                     <p className="text-[11px] text-purple-400">{formatDate(activeConv.date + 'T00:00:00')} • {activeConv.msgs.length} intercambios</p>
+                                </div>
+                                <div className="ml-auto">
+                                    <ClearHistoryButton sucursalId={sucursalId} phone={activeConv.phone} />
                                 </div>
                             </div>
 
