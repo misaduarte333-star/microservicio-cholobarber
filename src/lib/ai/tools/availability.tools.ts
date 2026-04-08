@@ -14,11 +14,10 @@ export const makeValidarHoraTool = (timezone: string = 'America/Hermosillo') => 
     return new DynamicStructuredTool({
         name: 'VALIDAR_HORA',
         description:
-            'OBLIGATORIO: Llama esta herramienta cada vez que el cliente mencione una hora (10am, 2pm, 9, 12, "las 8", etc). ' +
-            'Devuelve si la hora es válida para agendar hoy. ' +
+            'PASO 1 OBLIGATORIO: Llama esta herramienta SIEMPRE que el cliente mencione una hora. ' +
+            'Es la ÚNICA forma de saber si una hora es válida para hoy o si ya pasó. ' +
             'Entrada: {"hora_solicitada": "10:00", "fecha": "2026-03-31"}. ' +
-            'Ejemplos de hora_solicitada: "10:00", "14:30", "9", "12pm", "3pm", "15", "las 8". ' +
-            'SIEMPRE incluye la fecha en formato YYYY-MM-DD.',
+            'Si no la llamas, no puedes ofrecer barberos ni confirmar citas.',
         schema: z.object({
             hora_solicitada: z.string().optional().describe('Hora solicitada (ej: "14:30", "3pm", "15:00")'),
             fecha: z.string().optional().describe('Fecha en formato YYYY-MM-DD (ej: "2026-03-30")'),

@@ -35,9 +35,16 @@ class FreshContextHistory extends BaseChatMessageHistory {
     }
 
     async getMessages(): Promise<BaseMessage[]> {
-        const all = await this.inner.getMessages()
-        const limited = all.slice(-FreshContextHistory.MAX_MESSAGES)
+        let all: BaseMessage[] = []
+        try {
+            all = await this.inner.getMessages()
+        } catch (error: any) {
+            console.error(`[MemoryService] Error recuperando historial (${error.message}). Continuando sin contexto.`)
+            // Fallback a lista vacía para no romper el flujo con Error 500
+            return []
+        }
 
+        const limited = all.slice(-FreshContextHistory.MAX_MESSAGES)
         if (limited.length === 0) return []
 
         const formatter = new Intl.DateTimeFormat('es-MX', {
@@ -50,31 +57,44 @@ class FreshContextHistory extends BaseChatMessageHistory {
 
         const staleWarning = new HumanMessage(
             `[SISTEMA ${now}] Nuevo turno iniciado. ` +
-            `IMPORTANTE: cualquier dato de disponibilidad, validación de hora o slots ` +
-            `que aparezca en el historial está DESACTUALIZADO — el tiempo ha pasado. ` +
-            `Si el cliente propone o cambia una hora, DEBES llamar VALIDAR_HORA y DISPONIBILIDAD_HOY/OTRO_DIA antes de responder. ` +
-            `EXCEPCIÓN CRÍTICA: Si el cliente acaba de confirmar una propuesta que tú le hiciste, ` +
-            `llama VALIDAR_HORA y DISPONIBILIDAD_HOY para verificar disponibilidad, ` +
-            `y si el barbero sigue disponible EJECUTA AGENDAR_CITA INMEDIATAMENTE. `
+            `REGLA DE CIERRE: Si el historial muestra que el cliente ya confirmó ("sí", "listo", "agenda"), ` +
+            `debes obtener el cliente_id con BUSCAR_CLIENTE y EJECUTAR AGENDAR_CITA en este turno. ` +
+            `No respondas con texto de "éxito" si no llamas a la herramienta técnica correspondinte.`
         )
 
         return [staleWarning, ...limited]
     }
 
     async addMessage(message: BaseMessage): Promise<void> {
-        return this.inner.addMessage(message)
+        try {
+            return await this.inner.addMessage(message)
+        } catch (error: any) {
+            console.warn(`[MemoryService] No se pudo guardar mensaje en DB: ${error.message}`)
+        }
     }
 
     async addMessages(messages: BaseMessage[]): Promise<void> {
-        return this.inner.addMessages(messages)
+        try {
+            return await this.inner.addMessages(messages)
+        } catch (error: any) {
+            console.warn(`[MemoryService] No se pudieron guardar mensajes en DB: ${error.message}`)
+        }
     }
 
     async addUserMessage(message: string): Promise<void> {
-        return this.inner.addUserMessage(message)
+        try {
+            return await this.inner.addUserMessage(message)
+        } catch (error: any) {
+            console.warn(`[MemoryService] No se pudo guardar mensaje de usuario: ${error.message}`)
+        }
     }
 
     async addAIMessage(message: string): Promise<void> {
-        return this.inner.addAIMessage(message)
+        try {
+            return await this.inner.addAIMessage(message)
+        } catch (error: any) {
+            console.warn(`[MemoryService] No se pudo guardar mensaje de IA: ${error.message}`)
+        }
     }
 
     async clear(): Promise<void> {

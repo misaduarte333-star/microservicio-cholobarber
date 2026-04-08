@@ -311,17 +311,32 @@ export default function DevPage() {
                                     <div key={service.name} className="p-3 rounded-xl bg-slate-900/50 border border-slate-700/50 flex flex-col gap-1">
                                         <div className="flex items-center justify-between">
                                             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{service.name}</span>
-                                            <div className={`w-2 h-2 rounded-full ${service.data?.status === 'up' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'}`} />
+                                            <div className={`w-2 h-2 rounded-full ${
+                                                (service.name === 'Evolution' && service.data?.message?.includes('Omitido')) 
+                                                ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]' 
+                                                : service.data?.status === 'up' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'
+                                            }`} />
                                         </div>
                                         <div className="flex items-end justify-between mt-1">
-                                            <span className={`text-sm font-semibold ${service.data?.status === 'up' ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                {service.data?.status === 'up' ? 'ONLINE' : 'OFFLINE'}
+                                            <span className={`text-sm font-semibold ${
+                                                (service.name === 'Evolution' && service.data?.message?.includes('Omitido'))
+                                                ? 'text-amber-400'
+                                                : service.data?.status === 'up' ? 'text-emerald-400' : 'text-red-400'
+                                            }`}>
+                                                {service.name === 'Evolution' && service.data?.message?.includes('Omitido') 
+                                                    ? 'WEBHOOK NUBE' 
+                                                    : service.data?.status === 'up' ? 'ONLINE' : 'OFFLINE'
+                                                }
                                             </span>
                                             {service.data?.status === 'up' && (
                                                 <span className="text-[10px] text-slate-500 font-mono">{service.data?.latency}ms</span>
                                             )}
                                         </div>
-                                        {service.data?.error && (
+                                        {service.name === 'Evolution' && service.data?.message?.includes('Omitido') ? (
+                                            <div className="text-[9px] text-amber-500/70 mt-1 leading-tight">
+                                                Conectividad en webhook de la nube (Protección Dev)
+                                            </div>
+                                        ) : service.data?.error && (
                                             <div className="text-[9px] text-red-500/70 truncate mt-1 leading-tight" title={service.data.error}>
                                                 {service.data.error}
                                             </div>

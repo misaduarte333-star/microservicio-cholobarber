@@ -136,7 +136,9 @@ export default function ChatTester() {
     const [stepGroups, setStepGroups] = useState<StepGroup[]>([])
     const [input, setInput] = useState('')
     const [isLoading, setIsLoading] = useState(false)
-    const [phone] = useState('555-DEV-TEST')
+    const [phone] = useState('526622782576') // Teléfono de prueba por defecto
+    const [persistentPrompt, setPersistentPrompt] = useState<string | null>(null)
+    const [promptUpdatedAt, setPromptUpdatedAt] = useState<string | null>(null)
     const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
     const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -203,10 +205,16 @@ export default function ChatTester() {
                 const updated = [...prev]
                 const idx = updated.findIndex(g => g.messageId === msgId)
                 if (idx !== -1 && data.steps) {
-                    updated[idx] = { ...updated[idx], steps: data.steps, systemPrompt: data.systemPrompt }
+                    updated[idx] = { ...updated[idx], steps: data.steps }
                 }
                 return updated
             })
+
+            // Update persistent prompt if provided
+            if (data.systemPrompt) {
+                setPersistentPrompt(data.systemPrompt)
+                if (data.promptUpdatedAt) setPromptUpdatedAt(data.promptUpdatedAt)
+            }
 
         } catch (error: any) {
             const errorMsg: Message = { id: Date.now().toString(), role: 'system', text: 'Error: ' + error.message, time: new Date() }
@@ -225,42 +233,7 @@ export default function ChatTester() {
         }
     }
 
-    const handleSave = async () => {
-        const userMsgs = messages.filter(m => m.role === 'user')
-        const aiMsgs = messages.filter(m => m.role === 'ai')
-        
-        if (userMsgs.length === 0) {
-            setSaveMessage({ type: 'error', text: 'No hay conversación para guardar' })
-            return
-        }
 
-        // Get all steps from all groups
-        const allSteps = stepGroups.flatMap(g => g.steps)
-
-        try {
-            const res = await fetch('/api/dev/chat-debug', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'save',
-                    sucursalId,
-                    messages: messages.map(m => ({ role: m.role, text: m.text })),
-                    steps: allSteps
-                })
-            })
-
-            const data = await res.json()
-            if (res.ok) {
-                setSaveMessage({ type: 'success', text: `Guardado: ${data.savedCount} mensajes` })
-            } else {
-                setSaveMessage({ type: 'error', text: data.error || 'Error al guardar' })
-            }
-        } catch {
-            setSaveMessage({ type: 'error', text: 'Error de conexión' })
-        }
-
-        setTimeout(() => setSaveMessage(null), 3000)
-    }
 
     const totalToolCalls = stepGroups.reduce((acc, g) => acc + g.steps.filter(s => s.type === 'tool_call').length, 0)
     const totalErrors = stepGroups.reduce((acc, g) => acc + g.steps.filter(s => s.hasError || hasErrorInOutput(s.output)).length, 0)
@@ -290,17 +263,7 @@ export default function ChatTester() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <button
-                            onClick={handleSave}
-                            disabled={messages.filter(m => m.role === 'user').length === 0}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-semibold rounded-lg transition"
-                            title="Guardar conversación en Monitor IA"
-                        >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                            </svg>
-                            <span>Guardar</span>
-                        </button>
+                        {/* Botón de guardado eliminado */}
                     </div>
                 </header>
                 {saveMessage && (
@@ -496,7 +459,7 @@ export default function ChatTester() {
                     </div>
                 </header>
                 <div className="flex-1 overflow-y-auto p-3 bg-slate-900/50 scrollbar-hide">
-                    {stepGroups.length === 0 ? (
+                    {!persistentPrompt ? (
                         <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3">
                             <svg className="w-12 h-12 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -504,16 +467,21 @@ export default function ChatTester() {
                             <p className="text-sm text-center">Envía un mensaje para ver<br/>el prompt del agente</p>
                         </div>
                     ) : (
-                        stepGroups.slice().reverse().map((group, gi) => group.systemPrompt && (
-                            <div key={gi} className="mb-4 last:mb-0">
-                                <div className="text-[10px] font-mono text-slate-500 uppercase mb-2">
-                                   Último Prompt • {group.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between px-1">
+                                <div className="text-[10px] font-mono text-slate-500 uppercase">
+                                   Versión Actual en Servidor
                                 </div>
-                                <pre className="text-[10px] text-amber-200 bg-slate-950 rounded-lg p-3 overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
-                                    {group.systemPrompt}
-                                </pre>
+                                {promptUpdatedAt && (
+                                    <div className="text-[10px] bg-amber-500/10 text-amber-500/80 px-2 py-0.5 rounded border border-amber-500/20 font-mono">
+                                        ACTUALIZADO: {new Date(promptUpdatedAt).toLocaleString()}
+                                    </div>
+                                )}
                             </div>
-                        ))
+                            <pre className="text-[10px] text-amber-200 bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
+                                {persistentPrompt}
+                            </pre>
+                        </div>
                     )}
                 </div>
             </div>

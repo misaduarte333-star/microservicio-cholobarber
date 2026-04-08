@@ -28,9 +28,9 @@ function getLocalDate(dateStr: string, tz = 'America/Mexico_City') {
 
 async function getLivePromptData(supabase: any, sucursalId: string) {
     const [barberosRes, serviciosRes, sucursalRes, configRes] = await Promise.all([
-        supabase.from('barberos').select('nombre, horario_laboral, bloqueo_almuerzo, created_at, activo')
+        supabase.from('barberos').select('id, nombre, horario_laboral, bloqueo_almuerzo, created_at, activo')
             .eq('sucursal_id', sucursalId).eq('activo', true).order('nombre'),
-        supabase.from('servicios').select('nombre, duracion_minutos, precio, created_at, activo')
+        supabase.from('servicios').select('id, nombre, duracion_minutos, precio, created_at, activo')
             .eq('sucursal_id', sucursalId).eq('activo', true).order('nombre'),
         supabase.from('sucursales').select('nombre, direccion, telefono_whatsapp, horario_apertura, created_at')
             .eq('id', sucursalId).single(),
@@ -137,7 +137,7 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
     ) ?? conversations[0]
 
     return (
-        <div className="min-h-screen bg-slate-900 flex flex-col">
+        <div className="h-screen bg-slate-900 flex flex-col overflow-hidden">
             {/* Header */}
             <header className="border-b border-slate-700/50 bg-slate-800/90 sticky top-0 z-20 backdrop-blur-md shrink-0">
                 <div className="max-w-full px-6 py-3 flex items-center justify-between">
@@ -168,10 +168,10 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
             </header>
 
             {/* Body: sidebar + chat */}
-            <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 57px)' }}>
+            <div className="flex flex-1 overflow-hidden">
 
                 {/* Sidebar: conversation list */}
-                <aside className="w-80 shrink-0 bg-slate-800 border-r border-slate-700/50 flex flex-col overflow-hidden">
+                <aside className="w-72 shrink-0 bg-slate-800 border-r border-slate-700/50 flex flex-col overflow-hidden">
                     <div className="px-4 py-3 border-b border-slate-700/50 bg-slate-900/40">
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Conversaciones</p>
                         <p className="text-[10px] text-slate-600 mt-0.5">{conversations.length} chats • agrupadas por día</p>
@@ -281,25 +281,29 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
                                                     </span>
                                                     <div className="space-y-3">
                                                         {msg.tools_used.map((t: any, idx: number) => (
-                                                            <div key={idx} className="bg-slate-900/60 rounded-lg p-3 border border-slate-700/50 overflow-hidden">
-                                                                <div className="text-[11px] font-bold text-blue-400 uppercase mb-2 flex items-center gap-2">
+                                                            <details key={idx} className="bg-slate-900/60 rounded-lg border border-slate-700/50 overflow-hidden group">
+                                                                <summary className="text-[11px] font-bold text-blue-400 uppercase p-3 flex items-center gap-2 cursor-pointer hover:bg-slate-800/50 transition-colors select-none outline-none">
                                                                     <Zap className="w-3 h-3" /> {t.name}
-                                                                </div>
-                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                                    <div>
+                                                                    <span className="ml-auto text-[9px] text-slate-500 normal-case font-normal group-open:hidden">▶ Ver detalles</span>
+                                                                    <span className="ml-auto text-[9px] text-slate-500 normal-case font-normal hidden group-open:block">▼ Ocultar</span>
+                                                                </summary>
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 pt-0 border-t border-slate-800/80">
+                                                                    <div className="mt-2">
                                                                         <span className="text-[9px] text-slate-500 uppercase tracking-widest font-semibold flex mb-1">Argumentos (Input)</span>
                                                                         <pre className="text-[10px] font-mono text-amber-300/90 bg-black/40 p-2 rounded border border-slate-800 whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto scrollbar-hide">
-                                                                            {JSON.stringify(t.input, null, 2)}
+                                                                            {t.input != null && Object.keys(t.input).length > 0
+                                                                                ? JSON.stringify(t.input, null, 2)
+                                                                                : <span className="text-slate-600 italic">Sin argumentos registrados (log antiguo)</span>}
                                                                         </pre>
                                                                     </div>
-                                                                    <div>
+                                                                    <div className="mt-2">
                                                                         <span className="text-[9px] text-slate-500 uppercase tracking-widest font-semibold flex mb-1">Resultado (Output)</span>
-                                                                        <pre className="text-[10px] font-mono text-emerald-300 bg-black/40 p-2 rounded border border-slate-800 whitespace-pre-wrap leading-relaxed min-h-[40px] max-h-40 overflow-y-auto scrollbar-hide">
+                                                                        <pre className="text-[10px] font-mono text-emerald-300 bg-black/40 p-2 rounded border border-slate-800 whitespace-pre-wrap leading-relaxed min-h-[40px] max-h-60 overflow-y-auto scrollbar-hide">
                                                                             {typeof t.output === 'string' ? t.output : JSON.stringify(t.output, null, 2)}
                                                                         </pre>
                                                                     </div>
                                                                 </div>
-                                                            </div>
+                                                            </details>
                                                         ))}
                                                     </div>
                                                 </div>
@@ -332,7 +336,7 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
                 </main>
 
                 {/* Right Sidebar: Context / System Prompt */}
-                <aside className="w-80 shrink-0 bg-slate-800 border-l border-slate-700/50 flex flex-col overflow-hidden">
+                <aside className="w-96 shrink-0 bg-slate-800 border-l border-slate-700/50 flex flex-col overflow-hidden">
                     <header className="px-4 py-3 border-b border-slate-700/50 bg-slate-900/40 flex items-center gap-2">
                         <Code className="w-4 h-4 text-emerald-400" />
                         <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Prompt Dinámico</h2>

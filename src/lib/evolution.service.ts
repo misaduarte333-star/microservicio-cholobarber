@@ -7,6 +7,11 @@ export class EvolutionService {
      */
     public static async syncWebhook(appUrl: string): Promise<{ success: boolean; message: string }> {
         try {
+            if (process.env.NODE_ENV === 'development') {
+                console.log('[EvolutionSync] Saltando sincronización de webhook en entorno de desarrollo local para proteger instancia en AWS...')
+                return { success: true, message: 'Omitido en entorno local.' }
+            }
+
             const supabase = createClient()
             // 1. Obtener configuración global de la tabla que creamos
             const { data, error } = await supabase

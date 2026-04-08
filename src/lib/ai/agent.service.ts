@@ -36,6 +36,7 @@ export interface AgentRunResult {
     response: string
     steps: AgentStep[]
     systemPrompt?: string
+    promptUpdatedAt?: string
 }
 
 export class AgentService {
@@ -49,17 +50,18 @@ export class AgentService {
         // 1. Instanciar herramientas aisladas para esta sucursal
         const tools = makeAllTools(ctx.sucursalId, ctx.timezone)
 
-        // 2. Pre-cargar datos estáticos del negocio (barberos, servicios, sucursal)
+        // 2. Pre-cargar datos estáticos del negocio (barberos, servicios, sucursal) + Cliente
         const supabase = getAISupabaseClient()
-        let barberosRes, serviciosRes, sucursalRes
+        let barberosRes, serviciosRes, sucursalRes, clienteRes
         try {
-            [barberosRes, serviciosRes, sucursalRes] = await Promise.all([
+            [barberosRes, serviciosRes, sucursalRes, clienteRes] = await Promise.all([
                 supabase.from('barberos').select('id, nombre, horario_laboral, bloqueo_almuerzo')
                     .eq('sucursal_id', ctx.sucursalId).eq('activo', true).order('nombre'),
                 supabase.from('servicios').select('id, nombre, duracion_minutos, precio')
                     .eq('sucursal_id', ctx.sucursalId).eq('activo', true).order('nombre'),
-                supabase.from('sucursales').select('nombre, direccion, telefono_whatsapp, horario_apertura')
-                    .eq('id', ctx.sucursalId).single()
+                supabase.from('sucursales').select('nombre, direccion, telefono_whatsapp, horario_apertura, created_at, updated_at')
+                    .eq('id', ctx.sucursalId).single(),
+                supabase.from('clientes').select('id, nombre').eq('telefono', senderPhone).limit(1).maybeSingle()
             ])
 
             if (barberosRes.error) throw new Error(`Error barberos: ${barberosRes.error.message}`)
@@ -80,7 +82,8 @@ export class AgentService {
             customPrompt: ctx.customPrompt || undefined,
             barberos: barberosRes.data || [],
             servicios: serviciosRes.data || [],
-            sucursal: sucursalRes.data || undefined
+            sucursal: sucursalRes.data || undefined,
+            identifiedClient: clienteRes?.data || undefined
         })
 
         // 3. Crear LLM dinámico según el proveedor configurado
@@ -222,7 +225,12 @@ export class AgentService {
                 source: 'webhook'
             })
 
-            return { response: outputText, steps, systemPrompt: finalSystemPrompt }
+            return { 
+                response: outputText, 
+                steps, 
+                systemPrompt: finalSystemPrompt,
+                promptUpdatedAt: sucursalRes?.data?.updated_at || sucursalRes?.data?.created_at
+            }
 
         } catch (error: any) {
             console.error('[AgentService] Error:', error)

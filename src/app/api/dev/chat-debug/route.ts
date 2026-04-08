@@ -120,5 +120,10 @@ async function handleChatMessage(body: any, req: Request) {
         ctx
     )
 
-    return NextResponse.json({ response: result.response, steps: result.steps, systemPrompt: result.systemPrompt })
+    return NextResponse.json({ 
+        response: result.response, 
+        steps: result.steps, 
+        systemPrompt: result.systemPrompt,
+        promptUpdatedAt: result.promptUpdatedAt
+    })
 }

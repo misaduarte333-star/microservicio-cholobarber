@@ -16,14 +16,18 @@ export async function GET(req: NextRequest) {
         redis: { status: 'down', latency: 0, error: null as string | null },
         postgres: { status: 'down', latency: 0, error: null as string | null },
         supabase: { status: 'down', latency: 0, error: null as string | null },
-        evolution: { status: 'down', latency: 0, error: null as string | null, synced: false },
+        evolution: { status: 'down', latency: 0, error: null as string | null, synced: false, message: '' as string },
         timestamp: new Date().toISOString()
     }
 
     // 1. Redis Check
     const startRedis = performance.now()
     try {
-        await redis.ping()
+        // Timeout de 2s para evitar colgar el health check en dev
+        await Promise.race([
+            redis.ping(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout (2s)')), 2000))
+        ])
         results.redis.status = 'up'
         results.redis.latency = Math.round(performance.now() - startRedis)
     } catch (err: any) {
@@ -67,6 +71,7 @@ export async function GET(req: NextRequest) {
         console.log(`[Health] Sincronizando webhook con URL base: ${appUrlForSync}`)
         const syncRes = await EvolutionService.syncWebhook(appUrlForSync)
         results.evolution.synced = syncRes.success
+        results.evolution.message = syncRes.message
 
         const supabase = createClient()
         const { data } = await supabase.from('configuracion_ia_global').select('evolution_api_url, evolution_api_key').eq('id', 1).single()

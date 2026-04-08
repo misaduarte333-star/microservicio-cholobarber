@@ -3,11 +3,24 @@ import { AgentService, AgentContext } from './agent.service'
 
 const globalForRedis = globalThis as unknown as {
     redis: Redis | undefined
+    isLocalMemory: boolean // Flag para depuración
 }
 
-export const redis = globalForRedis.redis ?? new Redis(process.env.AGENT_REDIS_URL!)
+export const redis = globalForRedis.redis ?? new Redis(process.env.AGENT_REDIS_URL!, {
+    connectTimeout: 2000,
+    commandTimeout: 2000,
+    maxRetriesPerRequest: 1,
+    retryStrategy: (times) => null, // Desactivar reconexiones infinitas en dev
+    enableOfflineQueue: false     // No encolar comandos si está desconectado
+})
+
+redis.on('error', () => { /* Silenciar logs de error para no saturar terminal */ })
 
 if (process.env.NODE_ENV !== 'production') globalForRedis.redis = redis
+
+// Storage temporal en memoria si Redis falla
+const memoryStorage = new Map<string, string[]>()
+const memoryTimer = new Set<string>()
 
 export interface IncomingMessage {
     sessionId: string
@@ -30,16 +43,28 @@ export class DebouncerService {
         const listKey = `buffer:${msg.context.sucursalId}:${msg.senderPhone}`
         const timerKey = `timer:${msg.context.sucursalId}:${msg.senderPhone}`
 
-        await redis.rpush(listKey, JSON.stringify(msg))
+        // Intentar Redis primero
+        if (redis.status === 'ready') {
+            try {
+                await redis.rpush(listKey, JSON.stringify(msg))
+                const hasTimer = await redis.get(timerKey)
+                if (!hasTimer) {
+                    await redis.set(timerKey, 'running', 'EX', 10)
+                    setTimeout(() => this.processBuffer(msg.senderPhone, msg.context, msg.remoteJid), this.DEBOUNCE_TIME_MS)
+                }
+                return
+            } catch (err) {
+                console.warn('[Debouncer] Redis falló, usando memoria...')
+            }
+        }
 
-        const hasTimer = await redis.get(timerKey)
-        if (!hasTimer) {
-            await redis.set(timerKey, 'running', 'EX', 10) // Fallback si setTimeout falla
-            
-            setTimeout(
-                () => this.processBuffer(msg.senderPhone, msg.context, msg.remoteJid),
-                this.DEBOUNCE_TIME_MS
-            )
+        // Fallback a Memoria
+        if (!memoryStorage.has(listKey)) memoryStorage.set(listKey, [])
+        memoryStorage.get(listKey)!.push(JSON.stringify(msg))
+
+        if (!memoryTimer.has(timerKey)) {
+            memoryTimer.add(timerKey)
+            setTimeout(() => this.processBuffer(msg.senderPhone, msg.context, msg.remoteJid), this.DEBOUNCE_TIME_MS)
         }
     }
 
@@ -48,34 +73,40 @@ export class DebouncerService {
         const timerKey = `timer:${ctx.sucursalId}:${phone}`
         const unsentKey = `${this.UNSENT_KEY_PREFIX}${ctx.sucursalId}:${phone}`
 
-        const messages = await redis.lrange(listKey, 0, -1)
-        await redis.del(listKey)
-        await redis.del(timerKey)
+        let messages: string[] = []
+        
+        if (redis.status === 'ready') {
+            try {
+                messages = await redis.lrange(listKey, 0, -1)
+                await redis.del(listKey)
+                await redis.del(timerKey)
+            } catch {
+                messages = memoryStorage.get(listKey) || []
+            }
+        } else {
+            messages = memoryStorage.get(listKey) || []
+            memoryStorage.delete(listKey)
+            memoryTimer.delete(timerKey)
+        }
 
         if (messages.length === 0) return
 
-        // Extraer la configuración API a la que responder
-        // (En la vida real usarías una tabla de Evolution, pero ya se mapeó en route.ts el global y el local).
-        // En NEXT_PUBLIC no tenemos el global object aquí a mano, así que route.ts nos lo proveyó en ctx?
-        // Wait, route.ts provided `globalOpenAiKey` but didn't provide evoToken o evoPlatformBase...
-        // Let's pass the evo token inside the context. I'll modify context to carry it.
         const evoToken = (ctx as any).evoToken
         const evoEndpoint = (ctx as any).evoEndpoint
 
-        // 1. Re-enviar mensajes si hubo una falla en el turno anterior
-        const unsentRaw = await redis.get(unsentKey)
-        if (unsentRaw && evoEndpoint) {
-            let unsent: any
+        // 1. Re-enviar mensajes si hubo una falla en el turno anterior (Solo Redis soporta persistencia real aquí)
+        if (redis.status === 'ready') {
             try {
-                unsent = JSON.parse(unsentRaw)
-            } catch {
-                await redis.del(unsentKey)
-            }
-            if (unsent?.text) {
-                console.warn(`[Debouncer] Reenviando mensaje fallido previo a ${phone}`)
-                const res = await this.sendEvolutionMessage(evoEndpoint, evoToken, remoteJid, unsent.text)
-                if (res) await redis.del(unsentKey)
-            }
+                const unsentRaw = await redis.get(unsentKey)
+                if (unsentRaw && evoEndpoint) {
+                    let unsent: any
+                    try { unsent = JSON.parse(unsentRaw) } catch { await redis.del(unsentKey) }
+                    if (unsent?.text) {
+                        const res = await this.sendEvolutionMessage(evoEndpoint, evoToken, remoteJid, unsent.text)
+                        if (res) await redis.del(unsentKey)
+                    }
+                }
+            } catch { /* Ignorar fallos de persistencia en dev */ }
         }
 
         // 2. Parsear mensajes
@@ -101,20 +132,23 @@ export class DebouncerService {
             const output = result.response
             console.info(`[Debouncer] Agente Respondió a ${phone}: ${output.substring(0, 50)}...`)
 
-            // 3. Persistir en caché por si falla el envío HTTPS
-            await redis.set(unsentKey, JSON.stringify({ text: output, at: Date.now() }), 'EX', 3600)
+            // 3. Persistir en caché por si falla el envío HTTPS (Solo si Redis está ok)
+            if (redis.status === 'ready') {
+                try {
+                    await redis.set(unsentKey, JSON.stringify({ text: output, at: Date.now() }), 'EX', 3600)
+                } catch {}
+            }
 
             // 4. Enviar a Evolution
             if (evoEndpoint && output) {
                 const sent = await this.sendEvolutionMessage(evoEndpoint, evoToken, phone, output)
-                if (sent) {
-                    await redis.del(unsentKey) // LLegó correctamente
-                } else {
+                if (sent && redis.status === 'ready') {
+                    try { await redis.del(unsentKey) } catch {}
+                } else if (!sent) {
                     console.error(`[Debouncer] Error de red. Mensaje a ${phone} es unsent.`)
                 }
             } else {
                 console.warn('Simulando envío local por falta de credentials Evolution en Contexto:', output)
-                await redis.del(unsentKey)
             }
 
         } catch (error: any) {

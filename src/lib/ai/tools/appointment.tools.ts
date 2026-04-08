@@ -9,8 +9,9 @@ export const makeBuscarOCrearClienteTool = (sucursalId: string) => {
     return new DynamicStructuredTool({
         name: 'BUSCAR_CLIENTE',
         description:
-            'Busca o registra un cliente por teléfono. ' +
-            'Retorna el cliente_id que necesitarás en AGENDAR_CITA.',
+            'INDISPENSABLE: Llama esta herramienta al inicio para ver si el cliente ya existe. ' +
+            'Si devuelve encontrado:true, ya tienes su nombre y su cliente_id para AGENDAR_CITA. ' +
+            'Si encontrado:false, deberás preguntarle su nombre para poder registrarlo más tarde.',
         schema: z.object({
             telefono: z.string().describe('Teléfono del cliente'),
             nombre: z.string().optional().describe('Nombre del cliente (requerido si es nuevo)')
@@ -33,7 +34,11 @@ export const makeBuscarOCrearClienteTool = (sucursalId: string) => {
                 }
 
                 if (!nombre) {
-                    return JSON.stringify({ encontrado: false, mensaje: 'Cliente nuevo. Se necesita nombre para registrarlo.' })
+                    return JSON.stringify({ 
+                        encontrado: false, 
+                        mensaje: 'CLIENTE_NUEVO: El cliente no existe en la base de datos.',
+                        instruccion_para_agente: 'DEBES preguntar el nombre completo al usuario ahora mismo. No puedes agendar sin registrar su nombre.'
+                    })
                 }
 
                 const { data: nuevo, error } = await supabase
@@ -110,7 +115,8 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
     return new DynamicStructuredTool({
         name: 'AGENDAR_CITA',
         description:
-            'Agenda una cita. SOLO ejecutar tras confirmar: nombre, barbero, servicio, hora validada y disponibilidad.',
+            'ÚNICA FORMA DE CREAR UNA CITA. Ejecutar SOLO tras confirmar: nombre, barbero, servicio, hora validada y disponibilidad. ' +
+            'REQUIERE cliente_id (UUID), barbero_id (UUID) y servicio_id (UUID) obtenidos de las otras herramientas.',
         schema: z.object({
             barbero_id: z.string().describe('UUID del barbero'),
             servicio_id: z.string().describe('UUID del servicio'),
@@ -122,6 +128,26 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
         }),
         func: async ({ barbero_id, servicio_id, cliente_id, cliente_nombre, cliente_telefono, timestamp_inicio, timestamp_fin }) => {
             try {
+                // Validación de seguridad para evitar citas anónimas
+                const nombresProhibidos = ['desconocido', 'alguien', 'cliente', 'usuario', 'sin nombre', 'n/a', 'anonymous']
+                const nombreLimpio = cliente_nombre.toLowerCase().trim()
+                
+                if (nombresProhibidos.some(p => nombreLimpio === p) || nombreLimpio.length < 2) {
+                    return JSON.stringify({
+                        status: 'error',
+                        error: 'NOMBRE_INVALIDO',
+                        instruccion_para_agente: 'El nombre del cliente no es válido o es un marcador de posición. Pídele su nombre real al usuario.'
+                    })
+                }
+
+                if (!cliente_id || cliente_id.length < 10) {
+                     return JSON.stringify({
+                        status: 'error',
+                        error: 'CLIENTE_ID_INVALIDO',
+                        instruccion_para_agente: 'No tienes un ID de cliente válido. Debes llamar primero a BUSCAR_CLIENTE con el nombre del usuario para registrarlo.'
+                    })
+                }
+
                 if (!barbero_id || !servicio_id || !cliente_id || !cliente_nombre || !cliente_telefono || !timestamp_inicio || !timestamp_fin) {
                     return JSON.stringify({
                         status: 'error',

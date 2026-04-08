@@ -8,6 +8,7 @@ export interface TimeValidatorOutput {
     motivo: 'ok' | 'pasada' | 'menos_15' | 'justo'
     advertencia: boolean
     hora_solicitada_24h: string
+    sugerencia_fecha: 'hoy' | 'mañana' | null
     siguiente_bloque: string | null
     siguiente_bloque_12h: string | null
 }
@@ -52,7 +53,7 @@ export class TimeValidator {
             motivo = 'justo'
         }
 
-        if (status === 'RECHAZADA') {
+        if (status === 'RECHAZADA' || motivo === 'justo') {
             let tempH = hF
             let tempM = mF
             for (let i = 0; i < 48; i++) {
@@ -73,6 +74,7 @@ export class TimeValidator {
             motivo,
             advertencia,
             hora_solicitada_24h: this.formatHora24(hF, mF),
+            sugerencia_fecha: status === 'VALIDA' ? 'hoy' : 'mañana',
             siguiente_bloque: siguiente,
             siguiente_bloque_12h: siguiente
                 ? this.formatHora12(parseInt(siguiente.split(':')[0]), parseInt(siguiente.split(':')[1]))
@@ -103,12 +105,12 @@ export class TimeValidator {
         if (pm && h < 12) h += 12
         if (am && h === 12) h = 0
 
-        // Heurística: si no especifica AM/PM y la hora es 1-10
-        // Asumir AM si la hora actual es AM, o si la hora solicitada < hora actual
-        // Esto evita el bug de convertir "10" a "22:00" cuando el usuario quiere 10 AM
-        if (!pm && !am && h >= 1 && h <= 10) {
-            // Mantener como AM (no sumar 12)
-            // La lógica de negocio decidirá si es AM o PM basado en el contexto
+        // Heurística de proximidad: si no especifica AM/PM y la hora es 12
+        // y la hora actual es antes de mediodía (por ejemplo 11:30 AM),
+        // "12" casi siempre significa 12:00 PM (Mediodía) de HOY.
+        // Si h es 1-10, mantenemos AM.
+        if (!pm && !am && h >= 1 && h <= 12) {
+            // Mantener como AM/Mediodía
         }
 
         if (h > 23) h = 0
