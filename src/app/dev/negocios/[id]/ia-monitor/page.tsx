@@ -136,6 +136,11 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
         c.phone === selectedPhone && c.date === selectedDate
     ) ?? conversations[0]
 
+    // Diagnostic: last BUSCAR_CLIENTE call
+    const lastIdentTool = activeConv?.msgs?.flatMap(m => m.tools_used || [])
+        .filter((t: any) => t.name === 'BUSCAR_CLIENTE')
+        .pop()
+
     return (
         <div className="h-screen bg-slate-900 flex flex-col overflow-hidden">
             {/* Header */}
@@ -342,12 +347,46 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
                         <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Prompt Dinámico</h2>
                     </header>
                     <div className="p-4 flex-1 overflow-y-auto scrollbar-hide space-y-4">
-                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] rounded-lg">
+                        {/* Identificación Diagnostic */}
+                        <div className="bg-slate-900/80 rounded-xl p-4 border border-fuchsia-500/30 shadow-lg shadow-fuchsia-500/5">
+                            <h3 className="text-[10px] text-fuchsia-400 uppercase tracking-widest font-bold mb-3 flex items-center gap-2">
+                                <Zap className="w-3.5 h-3.5" /> Identificación del Cliente
+                            </h3>
+                            
+                            {!lastIdentTool ? (
+                                <p className="text-[11px] text-slate-500 italic">No se ha llamado a BUSCAR_CLIENTE en esta sesión.</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    <div>
+                                        <span className="text-[9px] text-slate-500 uppercase font-semibold block mb-1">Argumentos (Agent Send)</span>
+                                        <pre className="text-[10px] font-mono text-amber-300/90 bg-black/40 p-2 rounded border border-slate-700/50 overflow-x-auto">
+                                            {JSON.stringify(lastIdentTool.input, null, 2)}
+                                        </pre>
+                                    </div>
+                                    <div>
+                                        <span className="text-[9px] text-slate-500 uppercase font-semibold block mb-1">Respuesta (Tool Return)</span>
+                                        <pre className="text-[10px] font-mono text-emerald-400 bg-black/40 p-2 rounded border border-slate-700/50 overflow-x-auto">
+                                            {typeof lastIdentTool.output === 'string' 
+                                                ? lastIdentTool.output 
+                                                : JSON.stringify(lastIdentTool.output, null, 2)}
+                                        </pre>
+                                    </div>
+                                    {lastIdentTool.output?.encontrado === true && (
+                                        <div className="mt-2 text-[10px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1.5 rounded flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                            Cliente Identificado ✅
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] rounded-lg w-full">
                             <Clock className="w-3 h-3" />
-                            Última act.: {new Date(promptData.lastUpdated).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit' })}
+                            Última act. del sistema: {new Date(promptData.lastUpdated).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit' })}
                         </div>
                         <div className="bg-slate-900/80 rounded-xl p-3 border border-slate-700/50">
-                            <h3 className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-2">Contexto Actual</h3>
+                            <h3 className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-2">Prompt Dinámico (Contexto)</h3>
                             <pre className="text-[11px] font-mono text-slate-300 whitespace-pre-wrap leading-relaxed">
                                 {promptData.prompt}
                             </pre>

@@ -71,7 +71,7 @@ async function handleChatMessage(body: any, req: Request) {
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
-    const { message, sucursalId, sessionId = 'TEST_SESSION', senderPhone = '5551234567' } = body
+    const { message, sucursalId, sessionId = 'TEST_SESSION', senderPhone = '555-DEV-TEST' } = body
 
     if (!message || !sucursalId) {
         return NextResponse.json({ error: 'Mensaje y sucursalId requeridos.' }, { status: 400 })

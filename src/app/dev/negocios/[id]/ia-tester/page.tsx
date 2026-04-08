@@ -136,7 +136,7 @@ export default function ChatTester() {
     const [stepGroups, setStepGroups] = useState<StepGroup[]>([])
     const [input, setInput] = useState('')
     const [isLoading, setIsLoading] = useState(false)
-    const [phone] = useState('526622782576') // Teléfono de prueba por defecto
+    const [phone] = useState('555-DEV-TEST') // Identidad de prueba por defecto
     const [persistentPrompt, setPersistentPrompt] = useState<string | null>(null)
     const [promptUpdatedAt, setPromptUpdatedAt] = useState<string | null>(null)
     const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -180,7 +180,7 @@ export default function ChatTester() {
                     message: userText,
                     sucursalId,
                     senderPhone: phone,
-                    sessionId: 'dev-session-v1'
+                    sessionId: `dev-session-${phone}`
                 })
             })
 
@@ -238,6 +238,11 @@ export default function ChatTester() {
     const totalToolCalls = stepGroups.reduce((acc, g) => acc + g.steps.filter(s => s.type === 'tool_call').length, 0)
     const totalErrors = stepGroups.reduce((acc, g) => acc + g.steps.filter(s => s.hasError || hasErrorInOutput(s.output)).length, 0)
 
+    // Identificación Diagnostic
+    const lastIdentResult = stepGroups.flatMap(g => g.steps)
+        .filter(s => s.type === 'tool_result' && s.name === 'BUSCAR_CLIENTE')
+        .pop()
+
     return (
         <div className="min-h-screen bg-slate-900 flex items-start justify-center gap-4 pt-8 px-4">
 
@@ -260,10 +265,23 @@ export default function ChatTester() {
                         <div>
                             <h2 className="text-white font-bold leading-tight">Agente IA (Tester)</h2>
                             <p className="text-[10px] text-fuchsia-400 font-mono tracking-wider">{sucursalId.slice(0, 8)}... EN LINEA</p>
+                            <p className="text-[9px] text-slate-500 font-mono mt-0.5">SENDER: {phone}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        {/* Botón de guardado eliminado */}
+                        <button
+                            onClick={() => {
+                                setMessages([{ id: '1', role: 'system', text: 'Historial limpiado. Sesión reiniciada.', time: new Date() }])
+                                setStepGroups([])
+                                setPersistentPrompt(null)
+                            }}
+                            className="p-2 hover:bg-slate-700 rounded-full transition-colors text-slate-400 hover:text-white"
+                            title="Limpiar chat local"
+                        >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
                     </div>
                 </header>
                 {saveMessage && (
@@ -458,9 +476,46 @@ export default function ChatTester() {
                         </div>
                     </div>
                 </header>
-                <div className="flex-1 overflow-y-auto p-3 bg-slate-900/50 scrollbar-hide">
+                <div className="flex-1 overflow-y-auto p-4 bg-slate-900/50 scrollbar-hide space-y-6">
+                    {/* Identificación Diagnostic */}
+                    <div className="bg-slate-900 border border-fuchsia-500/30 rounded-2xl p-4 shadow-lg shadow-fuchsia-500/5">
+                        <h3 className="text-xs font-bold text-fuchsia-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse" />
+                            Diagnóstico: Identificación
+                        </h3>
+
+                        {!lastIdentResult ? (
+                            <p className="text-[11px] text-slate-500 italic px-1">Sin llamadas a BUSCAR_CLIENTE registradas en esta sesión.</p>
+                        ) : (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <p className="text-[9px] text-slate-500 uppercase font-bold mb-1 ml-1">Agent Request</p>
+                                        <pre className="text-[10px] font-mono text-amber-300 bg-black/40 p-2 rounded-lg border border-slate-800 truncate">
+                                            {JSON.stringify(stepGroups.flatMap(g => g.steps).filter(s => s.type === 'tool_call' && s.timestamp <= lastIdentResult.timestamp).pop()?.input, null, 2)}
+                                        </pre>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] text-slate-500 uppercase font-bold mb-1 ml-1">Tool Response</p>
+                                        <div className={`text-[10px] font-mono p-2 rounded-lg border flex items-center gap-2 ${
+                                            lastIdentResult.output?.encontrado ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+                                        }`}>
+                                            {lastIdentResult.output?.encontrado ? 'IDENTIFICADO ✅' : 'NUEVO / NO ENCONTRADO 👤'}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] text-slate-500 uppercase font-bold mb-1 ml-1">Datos Devueltos</p>
+                                    <pre className="text-[10px] font-mono text-slate-300 bg-black/40 p-2 rounded-lg border border-slate-800 overflow-x-auto">
+                                        {JSON.stringify(lastIdentResult.output, null, 2)}
+                                    </pre>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     {!persistentPrompt ? (
-                        <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-3">
+                        <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-3">
                             <svg className="w-12 h-12 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>

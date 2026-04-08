@@ -3,6 +3,23 @@ import { z } from 'zod'
 import { getAISupabaseClient } from './business.tools'
 
 /**
+ * Normaliza un número de teléfono de WhatsApp/Evolution API.
+ * Principalmente enfocado en México: 521XXXXXXXXXX -> 52XXXXXXXXXX
+ */
+export const normalizePhone = (phone: string): string => {
+    if (!phone) return ''
+    let cleaned = phone.replace(/\D/g, '') // Quitar todo lo que no sea número
+    
+    // Regla para México (Estandarización 521): 
+    // Si empieza con 52 y tiene 12 dígitos (ej: 52 662...), añadir el 1 -> 521...
+    if (cleaned.startsWith('52') && !cleaned.startsWith('521') && cleaned.length === 12) {
+        cleaned = '521' + cleaned.substring(2)
+    }
+
+    return cleaned
+}
+
+/**
  * Busca un cliente por teléfono en Supabase. Si no existe, lo crea.
  */
 export const makeBuscarOCrearClienteTool = (sucursalId: string) => {
@@ -21,11 +38,12 @@ export const makeBuscarOCrearClienteTool = (sucursalId: string) => {
                 if (!telefono) return JSON.stringify({ error: 'Se requiere el teléfono.' })
 
                 const supabase = getAISupabaseClient()
+                const phoneClean = normalizePhone(telefono)
 
                 const { data: existing } = await supabase
                     .from('clientes')
                     .select('id, nombre, total_citas, ultima_cita')
-                    .eq('telefono', telefono)
+                    .eq('telefono', phoneClean)
                     .limit(1)
                     .maybeSingle()
 
@@ -43,7 +61,7 @@ export const makeBuscarOCrearClienteTool = (sucursalId: string) => {
 
                 const { data: nuevo, error } = await supabase
                     .from('clientes')
-                    .insert([{ nombre, telefono }])
+                    .insert([{ nombre, telefono: phoneClean }])
                     .select('id, nombre')
                     .single()
 
@@ -73,6 +91,8 @@ export const makeMisCitasTool = (sucursalId: string) => {
                 if (!cliente_telefono) return JSON.stringify({ error: 'Se requiere el teléfono del cliente.' })
 
                 const supabase = getAISupabaseClient()
+                const phoneClean = normalizePhone(cliente_telefono)
+
                 const { data, error } = await supabase
                     .from('citas')
                     .select(`
@@ -82,7 +102,7 @@ export const makeMisCitasTool = (sucursalId: string) => {
                         servicios(nombre)
                     `)
                     .eq('sucursal_id', sucursalId)
-                    .eq('cliente_telefono', cliente_telefono)
+                    .eq('cliente_telefono', phoneClean)
                     .not('estado', 'in', '("cancelada","ausente","finalizada")')
                     .order('timestamp_inicio')
 
@@ -167,13 +187,15 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
 
                 const supabase = getAISupabaseClient()
 
+                const phoneClean = normalizePhone(cliente_telefono)
+
                 const insertPayload = {
                     sucursal_id: sucursalId,
                     barbero_id,
                     servicio_id,
                     cliente_id,
                     cliente_nombre,
-                    cliente_telefono,
+                    cliente_telefono: phoneClean,
                     timestamp_inicio: new Date(timestamp_inicio).toISOString(),
                     timestamp_fin: new Date(timestamp_fin).toISOString(),
                     estado: 'confirmada' as const,
@@ -235,13 +257,14 @@ export const makeCancelarCitaTool = (sucursalId: string) => {
                     return JSON.stringify({ status: 'error', error: 'Se requiere cita_id y cliente_telefono' })
                 }
 
+                const phoneClean = normalizePhone(cliente_telefono)
                 const supabase = getAISupabaseClient()
                 const { data, error } = await supabase
                     .from('citas')
                     .update({ estado: 'cancelada' })
                     .eq('id', cita_id)
                     .eq('sucursal_id', sucursalId)
-                    .eq('cliente_telefono', cliente_telefono)
+                    .eq('cliente_telefono', phoneClean)
                     .select('id')
 
                 if (error) throw error
