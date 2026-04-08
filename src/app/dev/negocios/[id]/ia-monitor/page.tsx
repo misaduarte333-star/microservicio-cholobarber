@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
+import { Code, Clock, Zap } from 'lucide-react'
+import { buildSystemPrompt } from '@/lib/ai/prompts'
 
 interface PageProps {
     params: Promise<{ id: string }>
@@ -24,6 +26,54 @@ function getLocalDate(dateStr: string, tz = 'America/Mexico_City') {
     return new Date(dateStr).toLocaleDateString('en-CA', { timeZone: tz }) // YYYY-MM-DD
 }
 
+async function getLivePromptData(supabase: any, sucursalId: string) {
+    const [barberosRes, serviciosRes, sucursalRes, configRes] = await Promise.all([
+        supabase.from('barberos').select('nombre, horario_laboral, bloqueo_almuerzo, created_at, activo')
+            .eq('sucursal_id', sucursalId).eq('activo', true).order('nombre'),
+        supabase.from('servicios').select('nombre, duracion_minutos, precio, created_at, activo')
+            .eq('sucursal_id', sucursalId).eq('activo', true).order('nombre'),
+        supabase.from('sucursales').select('nombre, direccion, telefono_whatsapp, horario_apertura, created_at')
+            .eq('id', sucursalId).single(),
+        supabase.from('configuracion_ia').select('*').eq('sucursal_id', sucursalId).maybeSingle()
+    ])
+
+    const ctx = {
+        sucursalId,
+        timezone: configRes.data?.timezone || 'America/Mexico_City',
+        nombre: sucursalRes.data?.nombre || 'Negocio',
+        agentName: configRes.data?.agent_name || 'Agente IA',
+        personality: configRes.data?.personality || 'Amable',
+        customPrompt: configRes.data?.custom_prompt || '',
+    }
+
+    const systemPromptStr = buildSystemPrompt({
+        nombre: ctx.nombre,
+        agentName: ctx.agentName,
+        personality: ctx.personality,
+        timezone: ctx.timezone,
+        customPrompt: ctx.customPrompt || undefined,
+        barberos: barberosRes.data || [],
+        servicios: serviciosRes.data || [],
+        sucursal: sucursalRes.data || undefined
+    })
+
+    const currentDate = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
+    const currentTime = new Intl.DateTimeFormat('es-MX', { timeZone: ctx.timezone, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
+
+    const finalSystemPrompt = systemPromptStr
+        .replace(/{current_date}/g, currentDate)
+        .replace(/{current_time}/g, currentTime)
+        .replace(/{sender_phone}/g, '[Teléfono Cliente]')
+
+    let lastUpdatedTimestamp = 0
+    if (sucursalRes.data?.created_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(sucursalRes.data.created_at).getTime())
+    barberosRes.data?.forEach((b: any) => { if (b.created_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(b.created_at).getTime()) })
+    serviciosRes.data?.forEach((s: any) => { if (s.created_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(s.created_at).getTime()) })
+    if (configRes.data?.updated_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(configRes.data.updated_at).getTime())
+
+    return { prompt: finalSystemPrompt, lastUpdated: new Date(lastUpdatedTimestamp || Date.now()).toISOString() }
+}
+
 export default async function MonitorPage({ params, searchParams }: PageProps) {
     const { id: sucursalId } = await params
     const { phone: selectedPhone, date: selectedDate } = await searchParams
@@ -33,13 +83,14 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
         process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    const [sucursalRes, logsRes] = await Promise.all([
+    const [sucursalRes, logsRes, promptData] = await Promise.all([
         supabase.from('sucursales').select('nombre').eq('id', sucursalId).single(),
         supabase.from('ia_request_logs')
             .select('*')
             .eq('sucursal_id', sucursalId)
             .order('created_at', { ascending: false })
-            .limit(500)
+            .limit(500),
+        getLivePromptData(supabase, sucursalId)
     ])
 
     const sucursal = sucursalRes.data
@@ -221,16 +272,36 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
                                             </div>
                                         </div>
 
-                                        {/* Tool badges if any */}
+                                        {/* Tool badges / inputs / outputs */}
                                         {msg.tools_used?.length > 0 && (
-                                            <div className="flex justify-center">
-                                                <div className="flex flex-wrap gap-1 justify-center bg-slate-800/50 rounded-xl px-3 py-2 border border-slate-700/40 max-w-[80%]">
-                                                    <span className="text-[9px] text-slate-500 w-full text-center mb-1">🔧 Herramientas invocadas</span>
-                                                    {msg.tools_used.map((t: any, idx: number) => (
-                                                        <span key={idx} className="px-2 py-0.5 bg-purple-500/10 text-purple-400 rounded-full font-bold text-[10px] border border-purple-500/20" title={t.name}>
-                                                            {t.name}
-                                                        </span>
-                                                    ))}
+                                            <div className="flex justify-center w-full">
+                                                <div className="flex flex-col bg-slate-800/50 rounded-xl px-4 py-3 border border-slate-700/40 w-full max-w-[90%] shadow-lg">
+                                                    <span className="text-[10px] font-bold text-fuchsia-400 uppercase tracking-widest flex items-center justify-center gap-2 mb-3">
+                                                        <Code className="w-4 h-4 text-fuchsia-400" /> Traza de Herramientas
+                                                    </span>
+                                                    <div className="space-y-3">
+                                                        {msg.tools_used.map((t: any, idx: number) => (
+                                                            <div key={idx} className="bg-slate-900/60 rounded-lg p-3 border border-slate-700/50 overflow-hidden">
+                                                                <div className="text-[11px] font-bold text-blue-400 uppercase mb-2 flex items-center gap-2">
+                                                                    <Zap className="w-3 h-3" /> {t.name}
+                                                                </div>
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                    <div>
+                                                                        <span className="text-[9px] text-slate-500 uppercase tracking-widest font-semibold flex mb-1">Argumentos (Input)</span>
+                                                                        <pre className="text-[10px] font-mono text-amber-300/90 bg-black/40 p-2 rounded border border-slate-800 whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto scrollbar-hide">
+                                                                            {JSON.stringify(t.input, null, 2)}
+                                                                        </pre>
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="text-[9px] text-slate-500 uppercase tracking-widest font-semibold flex mb-1">Resultado (Output)</span>
+                                                                        <pre className="text-[10px] font-mono text-emerald-300 bg-black/40 p-2 rounded border border-slate-800 whitespace-pre-wrap leading-relaxed min-h-[40px] max-h-40 overflow-y-auto scrollbar-hide">
+                                                                            {typeof t.output === 'string' ? t.output : JSON.stringify(t.output, null, 2)}
+                                                                        </pre>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
@@ -259,6 +330,26 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
                         </>
                     )}
                 </main>
+
+                {/* Right Sidebar: Context / System Prompt */}
+                <aside className="w-80 shrink-0 bg-slate-800 border-l border-slate-700/50 flex flex-col overflow-hidden">
+                    <header className="px-4 py-3 border-b border-slate-700/50 bg-slate-900/40 flex items-center gap-2">
+                        <Code className="w-4 h-4 text-emerald-400" />
+                        <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Prompt Dinámico</h2>
+                    </header>
+                    <div className="p-4 flex-1 overflow-y-auto scrollbar-hide space-y-4">
+                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] rounded-lg">
+                            <Clock className="w-3 h-3" />
+                            Última act.: {new Date(promptData.lastUpdated).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit' })}
+                        </div>
+                        <div className="bg-slate-900/80 rounded-xl p-3 border border-slate-700/50">
+                            <h3 className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-2">Contexto Actual</h3>
+                            <pre className="text-[11px] font-mono text-slate-300 whitespace-pre-wrap leading-relaxed">
+                                {promptData.prompt}
+                            </pre>
+                        </div>
+                    </div>
+                </aside>
             </div>
         </div>
     )
