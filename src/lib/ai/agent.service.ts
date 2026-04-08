@@ -4,6 +4,7 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 
 import { buildSystemPrompt } from './prompts'
 import { makeAllTools } from './tools'
+import { normalizePhone } from './tools/appointment.tools'
 import { getAISupabaseClient } from './tools/business.tools'
 import { MemoryService } from './memory.service'
 import { MetricsService } from './metrics.service'
@@ -52,6 +53,8 @@ export class AgentService {
 
         // 2. Pre-cargar datos estáticos del negocio (barberos, servicios, sucursal) + Cliente
         const supabase = getAISupabaseClient()
+        const phoneNormalized = normalizePhone(senderPhone)
+
         let barberosRes, serviciosRes, sucursalRes, clienteRes
         try {
             [barberosRes, serviciosRes, sucursalRes, clienteRes] = await Promise.all([
@@ -61,7 +64,7 @@ export class AgentService {
                     .eq('sucursal_id', ctx.sucursalId).eq('activo', true).order('nombre'),
                 supabase.from('sucursales').select('nombre, direccion, telefono_whatsapp, horario_apertura, created_at, updated_at')
                     .eq('id', ctx.sucursalId).single(),
-                supabase.from('clientes').select('id, nombre').eq('telefono', senderPhone).limit(1).maybeSingle()
+                supabase.from('clientes').select('id, nombre').eq('telefono', phoneNormalized).limit(1).maybeSingle()
             ])
 
             if (barberosRes.error) throw new Error(`Error barberos: ${barberosRes.error.message}`)
