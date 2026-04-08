@@ -150,6 +150,8 @@ export class AgentService {
 
             // 7b. Recopilar pasos del agente para el panel de debug
             const steps: AgentStep[] = []
+            const toolInputs: Record<string, any> = {}
+
             for (const msg of result.messages) {
                 const msgType = msg._getType?.()
                 if (msgType === 'ai') {
@@ -157,6 +159,7 @@ export class AgentService {
                     const toolCalls = (msg as any).tool_calls
                     if (toolCalls && toolCalls.length > 0) {
                         for (const tc of toolCalls) {
+                            if (tc.id) toolInputs[tc.id] = tc.args
                             steps.push({
                                 type: 'tool_call',
                                 name: tc.name,
@@ -182,9 +185,11 @@ export class AgentService {
                         parsedContent = rawContent.substring(0, 1000)
                         hasError = rawContent.toLowerCase().startsWith('error')
                     }
+                    const toolCallId = (msg as any).tool_call_id
                     steps.push({
                         type: 'tool_result',
                         name: (msg as any).name ?? 'unknown',
+                        input: toolCallId ? toolInputs[toolCallId] : undefined,
                         output: parsedContent,
                         timestamp: Date.now(),
                         hasError
@@ -211,7 +216,7 @@ export class AgentService {
                 latencyMs,
                 toolsUsed: toolMessages.map((m: any) => ({
                     name: m.name ?? 'unknown',
-                    input: {},
+                    input: toolInputs[(m as any).tool_call_id] || {},
                     output: String(m.content ?? '').substring(0, 500)
                 })),
                 source: 'webhook'
