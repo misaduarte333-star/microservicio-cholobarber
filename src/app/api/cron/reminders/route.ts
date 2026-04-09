@@ -41,118 +41,115 @@ export async function GET(req: NextRequest) {
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-        // 2. Obtener Configuración Global de Evolution
-        const { data: globalConfig } = await supabase
-            .from('configuracion_ia_global')
-            .select('*')
-            .eq('id', 1)
-            .single()
+        // 2. Obtener Configuración Global de Evolution y Sucursales Activas
+        const [globalRes, sucursalesRes] = await Promise.all([
+            supabase.from('configuracion_ia_global').select('*').eq('id', 1).single(),
+            supabase.from('sucursales').select('*').eq('recordatorios_activos', true).eq('activa', true)
+        ])
+
+        const globalConfig = globalRes.data
+        const sucursalesActivas = sucursalesRes.data || []
 
         if (!globalConfig?.evolution_api_url || !globalConfig?.evolution_api_key) {
             throw new Error('Falta configuración global de Evolution API')
         }
 
         const now = new Date()
-        
-        // Rango para recordatorios de 15 minutos ANTES
-        const startMin = addMinutes(now, 10).toISOString()
-        const startMax = addMinutes(now, 25).toISOString()
-
-        // Rango para recordatorios de TARDANZA (15 min DESPUÉS)
-        const endMin = subMinutes(now, 25).toISOString()
-        const endMax = subMinutes(now, 10).toISOString()
-
         const results = {
-            antes_15m: 0,
+            sucursales_procesadas: sucursalesActivas.length,
+            antes_recordatorio: 0,
             tardanza: 0,
             errores: [] as string[]
         }
 
-        // --- PROCESAR RECORDATORIOS 15M ANTES ---
-        const { data: citasAntes } = await supabase
-            .from('citas')
-            .select(`
-                id, cliente_nombre, cliente_telefono, timestamp_inicio,
-                sucursales (id, agent_instance_name, agent_evolution_key, evolution_instance, evolution_key, tipo_prestador_label),
-                barberos (nombre)
-            `)
-            .eq('estado', 'confirmada')
-            .eq('recordatorio_15m_enviado', false)
-            .gt('timestamp_inicio', startMin)
-            .lt('timestamp_inicio', startMax)
+        // 3. Iterar por sucursales para procesar sus citas
+        for (const suc of sucursalesActivas) {
+            const minAntes = suc.minutos_antes_recordatorio || 15
+            const minTarde = suc.minutos_tardanza_mensaje || 15
 
-        if (citasAntes && citasAntes.length > 0) {
-            for (const cita of citasAntes) {
-                const config = cita.sucursales as any
-                const barbero = cita.barberos as any
-                
-                // Prioridad: agent_instance_name > evolution_instance > Env > 'barberia'
-                const instance = config?.agent_instance_name || config?.evolution_instance || process.env.EVOLUTION_INSTANCE || 'barberia'
-                const apikey = config?.agent_evolution_key || config?.evolution_key || globalConfig.evolution_api_key
-                const label = config?.tipo_prestador_label || 'barbero'
-                
-                const horaLocal = formatInTimeZone(new Date(cita.timestamp_inicio), APP_TIMEZONE, 'h:mm a')
-                
-                const phone = sanitizePhone(cita.cliente_telefono)
-                
-                const message = `Hola ${cita.cliente_nombre}, te recordamos tu cita de hoy a las ${horaLocal} con el ${label} ${barbero.nombre}. ¡Te esperamos!`
-                
-                const sent = await EvolutionService.sendTextMessage(
-                    globalConfig.evolution_api_url,
-                    apikey,
-                    instance,
-                    phone,
-                    message
-                )
+            // Rangos dinámicos (+/- 7.5 minutos de ventana para el cron de 10-15 min)
+            const startMin = addMinutes(now, minAntes - 5).toISOString()
+            const startMax = addMinutes(now, minAntes + 10).toISOString()
 
-                if (sent) {
-                    await supabase.from('citas').update({ recordatorio_15m_enviado: true }).eq('id', cita.id)
-                    results.antes_15m++
-                } else {
-                    results.errores.push(`Error enviando 15m a ${cita.cliente_telefono}`)
+            const endMin = subMinutes(now, minTarde + 10).toISOString()
+            const endMax = subMinutes(now, minTarde - 5).toISOString()
+
+            // --- PROCESAR RECORDATORIOS (ANUNCIO/CONFIRMACIÓN) ---
+            const { data: citasAntes } = await supabase
+                .from('citas')
+                .select(`
+                    id, cliente_nombre, cliente_telefono, timestamp_inicio,
+                    barberos (nombre)
+                `)
+                .eq('sucursal_id', suc.id)
+                .eq('estado', 'confirmada')
+                .eq('recordatorio_15m_enviado', false)
+                .gt('timestamp_inicio', startMin)
+                .lt('timestamp_inicio', startMax)
+
+            if (citasAntes && citasAntes.length > 0) {
+                for (const cita of citasAntes) {
+                    const barbero = cita.barberos as any
+                    const instance = suc.agent_instance_name || suc.evolution_instance || process.env.EVOLUTION_INSTANCE || 'barberia'
+                    const apikey = suc.agent_evolution_key || suc.evolution_key || globalConfig.evolution_api_key
+                    const label = suc.tipo_prestador_label || 'barbero'
+                    
+                    const horaLocal = formatInTimeZone(new Date(cita.timestamp_inicio), APP_TIMEZONE, 'h:mm a')
+                    const phone = sanitizePhone(cita.cliente_telefono)
+                    const message = `Hola ${cita.cliente_nombre}, te recordamos tu cita de hoy a las ${horaLocal} con el ${label} ${barbero.nombre}. ¡Te esperamos!`
+                    
+                    const sent = await EvolutionService.sendTextMessage(
+                        globalConfig.evolution_api_url,
+                        apikey,
+                        instance,
+                        phone,
+                        message
+                    )
+
+                    if (sent) {
+                        await supabase.from('citas').update({ recordatorio_15m_enviado: true }).eq('id', cita.id)
+                        results.antes_recordatorio++
+                    } else {
+                        results.errores.push(`Error recordatorio suc:${suc.slug} a ${cita.cliente_telefono}`)
+                    }
                 }
             }
-        }
 
-        // --- PROCESAR RECORDATORIOS DE TARDANZA ---
-        const { data: citasTarde } = await supabase
-            .from('citas')
-            .select(`
-                id, cliente_nombre, cliente_telefono, timestamp_inicio,
-                sucursales (id, agent_instance_name, agent_evolution_key, evolution_instance, evolution_key),
-                barberos (nombre)
-            `)
-            .eq('estado', 'confirmada')
-            .eq('recordatorio_tarde_enviado', false)
-            .gt('timestamp_inicio', endMin) // Se basa en cuando debió INICIAR
-            .lt('timestamp_inicio', endMax)
+            // --- PROCESAR RECORDATORIOS DE TARDANZA ---
+            const { data: citasTarde } = await supabase
+                .from('citas')
+                .select(`
+                    id, cliente_nombre, cliente_telefono, timestamp_inicio
+                `)
+                .eq('sucursal_id', suc.id)
+                .eq('estado', 'confirmada')
+                .eq('recordatorio_tarde_enviado', false)
+                .gt('timestamp_inicio', endMin)
+                .lt('timestamp_inicio', endMax)
 
-        if (citasTarde && citasTarde.length > 0) {
-            for (const cita of citasTarde) {
-                const config = cita.sucursales as any
-                // Prioridad: agent_instance_name > evolution_instance > Env > 'barberia'
-                const instance = config?.agent_instance_name || config?.evolution_instance || process.env.EVOLUTION_INSTANCE || 'barberia'
-                const apikey = config?.agent_evolution_key || config?.evolution_key || globalConfig.evolution_api_key
-                
-                const horaLocal = formatInTimeZone(new Date(cita.timestamp_inicio), APP_TIMEZONE, 'h:mm a')
-                
-                const phone = sanitizePhone(cita.cliente_telefono)
-                
-                const message = `Hola ${cita.cliente_nombre}, ¿vas en camino? Tu cita registrada era a las ${horaLocal}. Si deseas, podemos intentar reagendarla para un espacio disponible más tarde hoy. ¿Deseas que busque un lugar?`
-                
-                const sent = await EvolutionService.sendTextMessage(
-                    globalConfig.evolution_api_url,
-                    apikey,
-                    instance,
-                    phone,
-                    message
-                )
+            if (citasTarde && citasTarde.length > 0) {
+                for (const cita of citasTarde) {
+                    const instance = suc.agent_instance_name || suc.evolution_instance || process.env.EVOLUTION_INSTANCE || 'barberia'
+                    const apikey = suc.agent_evolution_key || suc.evolution_key || globalConfig.evolution_api_key
+                    
+                    const horaLocal = formatInTimeZone(new Date(cita.timestamp_inicio), APP_TIMEZONE, 'h:mm a')
+                    const phone = sanitizePhone(cita.cliente_telefono)
+                    const message = `Hola ${cita.cliente_nombre}, ¿vas en camino? Tu cita registrada era a las ${horaLocal}. Si deseas, podemos intentar reagendarla para un espacio disponible más tarde hoy. ¿Deseas que busque un lugar?`
+                    
+                    const sent = await EvolutionService.sendTextMessage(
+                        globalConfig.evolution_api_url,
+                        apikey,
+                        instance,
+                        phone,
+                        message
+                    )
 
-                if (sent) {
-                    await supabase.from('citas').update({ recordatorio_tarde_enviado: true }).eq('id', cita.id)
-                    results.tardanza++
-                } else {
-                    results.errores.push(`Error enviando tardanza a ${cita.cliente_telefono}`)
+                    if (sent) {
+                        await supabase.from('citas').update({ recordatorio_tarde_enviado: true }).eq('id', cita.id)
+                        results.tardanza++
+                    } else {
+                        results.errores.push(`Error tardanza suc:${suc.slug} a ${cita.cliente_telefono}`)
+                    }
                 }
             }
         }

@@ -59,11 +59,14 @@ export interface Sucursal {
     agent_instance_name: string | null
     agent_evolution_key: string | null
     agent_prompt_override: string | null
-    agent_provider: 'openai' | 'anthropic' | 'groq' | null
-    agent_model: string | null
+    llm_provider: 'openai' | 'anthropic' | 'groq' | null
+    llm_model: string | null
     agent_enabled: boolean
     tipo_prestador: string | null
     tipo_prestador_label: string | null
+    recordatorios_activos: boolean
+    minutos_antes_recordatorio: number
+    minutos_tardanza_mensaje: number
 }
 
 

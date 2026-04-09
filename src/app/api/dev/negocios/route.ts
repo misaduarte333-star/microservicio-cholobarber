@@ -57,7 +57,9 @@ export async function POST(req: NextRequest) {
         const { 
             nombre, slug, plan, adminEmail, adminPassword, telefono_whatsapp,
             agent_name, agent_personality, agent_instance_name, agent_evolution_key,
-            tipo_prestador, tipo_prestador_label
+            tipo_prestador, tipo_prestador_label,
+            llm_provider, llm_model,
+            recordatorios_activos, minutos_antes_recordatorio, minutos_tardanza_mensaje
         } = await req.json()
 
         if (!nombre || !slug || !adminEmail || !adminPassword || !telefono_whatsapp) {
@@ -89,8 +91,13 @@ export async function POST(req: NextRequest) {
                     agent_instance_name,
                     agent_evolution_key,
                     agent_enabled: true,
+                    llm_provider: llm_provider || null,
+                    llm_model: llm_model || null,
                     tipo_prestador: tipo_prestador || 'barbero',
-                    tipo_prestador_label: tipo_prestador_label || 'Barbero'
+                    tipo_prestador_label: tipo_prestador_label || 'Barbero',
+                    recordatorios_activos: recordatorios_activos || false,
+                    minutos_antes_recordatorio: minutos_antes_recordatorio || 15,
+                    minutos_tardanza_mensaje: minutos_tardanza_mensaje || 15
                 }
             ])
             .select()

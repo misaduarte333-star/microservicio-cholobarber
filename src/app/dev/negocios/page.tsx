@@ -36,11 +36,15 @@ export default function GestorNegocios() {
         agent_personality: 'Friendly',
         agent_instance_name: '',
         agent_evolution_key: '',
-        agent_provider: '', // default a global
-        agent_model: '',
+        llm_provider: '', // default a global
+        llm_model: '',
         // Tipo Prestador
         tipo_prestador: 'barbero',
-        tipo_prestador_label: 'Barbero'
+        tipo_prestador_label: 'Barbero',
+        // Recordatorios
+        recordatorios_activos: false,
+        minutos_antes_recordatorio: 15,
+        minutos_tardanza_mensaje: 15
     })
 
     const fetchSucursales = async () => {
@@ -77,10 +81,13 @@ export default function GestorNegocios() {
                 agent_personality: form.agent_personality,
                 agent_instance_name: form.agent_instance_name,
                 agent_evolution_key: form.agent_evolution_key,
-                agent_provider: form.agent_provider || null,
-                agent_model: form.agent_model || null,
+                llm_provider: form.llm_provider || null,
+                llm_model: form.llm_model || null,
                 tipo_prestador: form.tipo_prestador,
-                tipo_prestador_label: form.tipo_prestador_label
+                tipo_prestador_label: form.tipo_prestador_label,
+                recordatorios_activos: form.recordatorios_activos,
+                minutos_antes_recordatorio: form.minutos_antes_recordatorio,
+                minutos_tardanza_mensaje: form.minutos_tardanza_mensaje
             }
 
             if (isEditing) {
@@ -113,10 +120,13 @@ export default function GestorNegocios() {
                 agent_personality: 'Friendly',
                 agent_instance_name: '',
                 agent_evolution_key: '',
-                agent_provider: '',
-                agent_model: '',
+                llm_provider: '',
+                llm_model: '',
                 tipo_prestador: 'barbero',
-                tipo_prestador_label: 'Barbero'
+                tipo_prestador_label: 'Barbero',
+                recordatorios_activos: false,
+                minutos_antes_recordatorio: 15,
+                minutos_tardanza_mensaje: 15
             })
             setIsCreating(false)
             setEditingId(null)
@@ -139,10 +149,13 @@ export default function GestorNegocios() {
             agent_personality: s.agent_personality || 'Friendly',
             agent_instance_name: s.agent_instance_name || '',
             agent_evolution_key: s.agent_evolution_key || '',
-            agent_provider: s.agent_provider || '',
-            agent_model: s.agent_model || '',
+            llm_provider: s.llm_provider || '',
+            llm_model: s.llm_model || '',
             tipo_prestador: s.tipo_prestador || 'barbero',
-            tipo_prestador_label: s.tipo_prestador_label || 'Barbero'
+            tipo_prestador_label: s.tipo_prestador_label || 'Barbero',
+            recordatorios_activos: s.recordatorios_activos || false,
+            minutos_antes_recordatorio: s.minutos_antes_recordatorio || 15,
+            minutos_tardanza_mensaje: s.minutos_tardanza_mensaje || 15
         })
         setEditingId(s.id)
         setIsCreating(true)
@@ -436,8 +449,8 @@ export default function GestorNegocios() {
                                     <div>
                                         <label className="block text-sm font-medium text-slate-300 mb-2">Proveedor Custom (Dejar vacío=Global)</label>
                                         <select
-                                            value={form.agent_provider}
-                                            onChange={(e) => setForm({ ...form, agent_provider: e.target.value })}
+                                            value={form.llm_provider}
+                                            onChange={(e) => setForm({ ...form, llm_provider: e.target.value })}
                                             className="input-field w-full bg-slate-900 border-slate-700"
                                         >
                                             <option value="">-- Ignorar (Usar Configuración Global) --</option>
@@ -449,12 +462,12 @@ export default function GestorNegocios() {
                                     <div>
                                         <label className="block text-sm font-medium text-slate-300 mb-2">Modelo del Agente</label>
                                         <select
-                                            value={form.agent_model}
-                                            onChange={(e) => setForm({ ...form, agent_model: e.target.value })}
+                                            value={form.llm_model}
+                                            onChange={(e) => setForm({ ...form, llm_model: e.target.value })}
                                             className="input-field w-full bg-slate-900 border-slate-700"
                                         >
                                             <option value="">-- Usar modelo global por defecto --</option>
-                                            {(!form.agent_provider || form.agent_provider === 'openai') && (
+                                            {(!form.llm_provider || form.llm_provider === 'openai') && (
                                                 <>
                                                     <option value="gpt-4o">GPT-4o</option>
                                                     <option value="gpt-4o-mini">GPT-4o Mini</option>
@@ -466,7 +479,7 @@ export default function GestorNegocios() {
                                                     <option value="o3-mini">o3-mini (Reasoning)</option>
                                                 </>
                                             )}
-                                            {form.agent_provider === 'anthropic' && (
+                                            {form.llm_provider === 'anthropic' && (
                                                 <>
                                                     <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
                                                     <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
@@ -474,7 +487,7 @@ export default function GestorNegocios() {
                                                     <option value="claude-3-opus-20240229">Claude 3 Opus (Premium)</option>
                                                 </>
                                             )}
-                                            {form.agent_provider === 'groq' && (
+                                            {form.llm_provider === 'groq' && (
                                                 <>
                                                     <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile</option>
                                                     <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant</option>
@@ -484,6 +497,59 @@ export default function GestorNegocios() {
                                                 </>
                                             )}
                                         </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* ===== SECCIÓN RECORDATORIOS ===== */}
+                            <div className="pt-6 border-t border-slate-700/50">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-sm font-bold text-blue-400 uppercase tracking-wider">Recordatorios Automáticos</h3>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <span className="text-xs text-slate-400">{form.recordatorios_activos ? 'Activados' : 'Desactivados'}</span>
+                                        <div 
+                                            onClick={() => setForm({ ...form, recordatorios_activos: !form.recordatorios_activos })}
+                                            className={`w-10 h-5 rounded-full relative transition-colors ${form.recordatorios_activos ? 'bg-blue-500' : 'bg-slate-700'}`}
+                                        >
+                                            <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${form.recordatorios_activos ? 'right-1' : 'left-1'}`} />
+                                        </div>
+                                    </label>
+                                </div>
+
+                                <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 transition-opacity ${form.recordatorios_activos ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                                    <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/10">
+                                        <label className="block text-sm font-medium text-slate-300 mb-2">Minutos antes (Recordatorio)</label>
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                type="number"
+                                                value={form.minutos_antes_recordatorio}
+                                                onChange={(e) => setForm({ ...form, minutos_antes_recordatorio: parseInt(e.target.value) || 0 })}
+                                                className="input-field w-24 bg-slate-900 border-slate-700 text-center"
+                                                min="1"
+                                                max="1440"
+                                            />
+                                            <span className="text-sm text-slate-400">minutos antes de la hora pactada</span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 mt-2 italic">
+                                            El cliente recibirá un mensaje de confirmación en este tiempo.
+                                        </p>
+                                    </div>
+                                    <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/10">
+                                        <label className="block text-sm font-medium text-slate-300 mb-2">Minutos después (Mensaje Retraso)</label>
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                type="number"
+                                                value={form.minutos_tardanza_mensaje}
+                                                onChange={(e) => setForm({ ...form, minutos_tardanza_mensaje: parseInt(e.target.value) || 0 })}
+                                                className="input-field w-24 bg-slate-900 border-slate-700 text-center"
+                                                min="1"
+                                                max="120"
+                                            />
+                                            <span className="text-sm text-slate-400">minutos después de la hora</span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 mt-2 italic">
+                                            Se enviará si el cliente no ha sido marcado como "presente".
+                                        </p>
                                     </div>
                                 </div>
                             </div>
