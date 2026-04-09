@@ -7,6 +7,7 @@ export interface TimeValidatorOutput {
     status: 'VALIDA' | 'RECHAZADA'
     motivo: 'ok' | 'pasada' | 'menos_15' | 'justo'
     advertencia: boolean
+    ajustada: boolean
     hora_solicitada_24h: string
     sugerencia_fecha: 'hoy' | 'mañana' | null
     siguiente_bloque: string | null
@@ -30,6 +31,9 @@ export class TimeValidator {
         const r = this.redondear(p.h, p.m)
         const hF = r.h
         const mF = r.m
+
+        // Detectar si hubo ajuste (si la hora original parsed no era :00 o :30)
+        const ajustada = (p.m !== 0 && p.m !== 30)
 
         console.log('[TimeValidator] parsed:', { h: p.h, m: p.m }, 'rounded:', { hF, mF }, 'actualMin:', actualMin, 'solicitadaMin:', hF * 60 + mF)
 
@@ -73,6 +77,7 @@ export class TimeValidator {
             status,
             motivo,
             advertencia,
+            ajustada,
             hora_solicitada_24h: this.formatHora24(hF, mF),
             sugerencia_fecha: status === 'VALIDA' ? 'hoy' : 'mañana',
             siguiente_bloque: siguiente,

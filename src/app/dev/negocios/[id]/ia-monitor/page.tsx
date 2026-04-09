@@ -28,7 +28,7 @@ function getLocalDate(dateStr: string, tz = 'America/Mexico_City') {
     return new Date(dateStr).toLocaleDateString('en-CA', { timeZone: tz }) // YYYY-MM-DD
 }
 
-async function getLivePromptData(supabase: any, sucursalId: string) {
+async function getLivePromptData(supabase: any, sucursalId: string, identifiedClient?: { id: string, nombre: string } | null) {
     const [barberosRes, serviciosRes, sucursalRes, configRes] = await Promise.all([
         supabase.from('barberos').select('id, nombre, horario_laboral, bloqueo_almuerzo, created_at, activo')
             .eq('sucursal_id', sucursalId).eq('activo', true).order('nombre'),
@@ -46,6 +46,7 @@ async function getLivePromptData(supabase: any, sucursalId: string) {
         agentName: configRes.data?.agent_name || 'Agente IA',
         personality: configRes.data?.personality || 'Amable',
         customPrompt: configRes.data?.custom_prompt || '',
+        tipoPrestadorLabel: configRes.data?.tipo_prestador_label || 'Barbero'
     }
 
     // Construir catálogo inline para vista previa del Monitor (sin Redis)
@@ -67,7 +68,9 @@ async function getLivePromptData(supabase: any, sucursalId: string) {
         personality: ctx.personality,
         timezone: ctx.timezone,
         customPrompt: ctx.customPrompt || undefined,
-        businessCatalog
+        businessCatalog,
+        identifiedClient: identifiedClient || undefined,
+        tipoPrestadorLabel: ctx.tipoPrestadorLabel
     })
 
     const currentDate = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
@@ -97,6 +100,17 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
         process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
+    // Buscar cliente identificado si hay un teléfono seleccionado
+    let identifiedClient = null
+    if (selectedPhone) {
+        const { data: client } = await supabase
+            .from('clientes')
+            .select('id, nombre')
+            .eq('telefono', selectedPhone)
+            .maybeSingle()
+        identifiedClient = client
+    }
+
     const [sucursalRes, logsRes, promptData] = await Promise.all([
         supabase.from('sucursales').select('nombre').eq('id', sucursalId).single(),
         supabase.from('ia_request_logs')
@@ -104,7 +118,7 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
             .eq('sucursal_id', sucursalId)
             .order('created_at', { ascending: false })
             .limit(500),
-        getLivePromptData(supabase, sucursalId)
+        getLivePromptData(supabase, sucursalId, identifiedClient)
     ])
 
     const sucursal = sucursalRes.data

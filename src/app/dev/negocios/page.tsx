@@ -23,6 +23,7 @@ export default function GestorNegocios() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [isCreating, setIsCreating] = useState(false)
+    const [editingId, setEditingId] = useState<string | null>(null)
     const [form, setForm] = useState({
         nombre: '',
         slug: '',
@@ -36,7 +37,10 @@ export default function GestorNegocios() {
         agent_instance_name: '',
         agent_evolution_key: '',
         agent_provider: '', // default a global
-        agent_model: ''
+        agent_model: '',
+        // Tipo Prestador
+        tipo_prestador: 'barbero',
+        tipo_prestador_label: 'Barbero'
     })
 
     const fetchSucursales = async () => {
@@ -57,33 +61,47 @@ export default function GestorNegocios() {
         fetchSucursales()
     }, [])
 
-    const handleCreate = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         try {
-            const res = await fetch('/api/dev/negocios', {
-                method: 'POST',
+            const isEditing = !!editingId
+            const url = '/api/dev/negocios'
+            const method = isEditing ? 'PATCH' : 'POST'
+
+            const payload: any = {
+                nombre: form.nombre,
+                slug: form.slug,
+                plan: form.plan,
+                telefono_whatsapp: form.telefono_whatsapp,
+                agent_name: form.agent_name,
+                agent_personality: form.agent_personality,
+                agent_instance_name: form.agent_instance_name,
+                agent_evolution_key: form.agent_evolution_key,
+                agent_provider: form.agent_provider || null,
+                agent_model: form.agent_model || null,
+                tipo_prestador: form.tipo_prestador,
+                tipo_prestador_label: form.tipo_prestador_label
+            }
+
+            if (isEditing) {
+                payload.id = editingId
+            } else {
+                payload.adminEmail = form.adminEmail
+                payload.adminPassword = form.adminPassword
+            }
+
+            const res = await fetch(url, {
+                method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    nombre: form.nombre,
-                    slug: form.slug,
-                    plan: form.plan,
-                    telefono_whatsapp: form.telefono_whatsapp,
-                    adminEmail: form.adminEmail,
-                    adminPassword: form.adminPassword,
-                    agent_name: form.agent_name,
-                    agent_personality: form.agent_personality,
-                    agent_instance_name: form.agent_instance_name,
-                    agent_evolution_key: form.agent_evolution_key,
-                    agent_provider: form.agent_provider || null,
-                    agent_model: form.agent_model || null
-                })
+                body: JSON.stringify(payload)
             })
 
             if (!res.ok) {
                 const err = await res.json()
-                throw new Error(err.error || 'Error al crear negocio')
+                throw new Error(err.error || `Error al ${isEditing ? 'editar' : 'crear'} negocio`)
             }
 
+            // Reset form
             setForm({ 
                 nombre: '', 
                 slug: '', 
@@ -96,14 +114,39 @@ export default function GestorNegocios() {
                 agent_instance_name: '',
                 agent_evolution_key: '',
                 agent_provider: '',
-                agent_model: ''
+                agent_model: '',
+                tipo_prestador: 'barbero',
+                tipo_prestador_label: 'Barbero'
             })
             setIsCreating(false)
+            setEditingId(null)
             fetchSucursales()
-            alert('Negocio y Administrador creados con éxito.')
+            alert(isEditing ? 'Configuración actualizada con éxito.' : 'Negocio y Administrador creados con éxito.')
         } catch (err) {
-            alert('Error en el registro: ' + formatError(err))
+            alert('Error: ' + formatError(err))
         }
+    }
+
+    const startEditing = (s: SucursalConStats) => {
+        setForm({
+            nombre: s.nombre || '',
+            slug: s.slug || '',
+            plan: s.plan || 'basico',
+            telefono_whatsapp: s.telefono_whatsapp || '',
+            adminEmail: '', // No editable here
+            adminPassword: '', // No editable here
+            agent_name: s.agent_name || 'BarberBot',
+            agent_personality: s.agent_personality || 'Friendly',
+            agent_instance_name: s.agent_instance_name || '',
+            agent_evolution_key: s.agent_evolution_key || '',
+            agent_provider: s.agent_provider || '',
+            agent_model: s.agent_model || '',
+            tipo_prestador: s.tipo_prestador || 'barbero',
+            tipo_prestador_label: s.tipo_prestador_label || 'Barbero'
+        })
+        setEditingId(s.id)
+        setIsCreating(true)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
     }
 
     const toggleActivo = async (id: string, currentStatus: boolean) => {
@@ -199,8 +242,11 @@ export default function GestorNegocios() {
 
                 {isCreating && (
                     <div className="mb-8 p-6 rounded-2xl bg-slate-800 border border-slate-700 animate-fade-in glass-card">
-                        <h2 className="text-lg font-bold text-white mb-6">Registrar Nuevo Negocio</h2>
-                        <form onSubmit={handleCreate} className="space-y-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-lg font-bold text-white">{editingId ? 'Editar Configuración del Negocio' : 'Registrar Nuevo Negocio'}</h2>
+                            {editingId && <span className="text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-1 rounded">ID: {editingId}</span>}
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-300 mb-2">Nombre Comercial</label>
@@ -248,36 +294,102 @@ export default function GestorNegocios() {
                                 </div>
                             </div>
 
-                            <div className="pt-6 border-t border-slate-700/50">
-                                <h3 className="text-sm font-bold text-emerald-400 uppercase tracking-wider mb-4">Credenciales del Administrador</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-300 mb-2">Correo Electronico</label>
-                                        <input
-                                            required
-                                            type="email"
-                                            value={form.adminEmail}
-                                            onChange={(e) => setForm({ ...form, adminEmail: e.target.value })}
-                                            className="input-field w-full bg-slate-900 border-slate-700"
-                                            placeholder="admin@ejemplo.com"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-300 mb-2">Contrasena Inicial</label>
-                                        <input
-                                            required
-                                            type="text"
-                                            value={form.adminPassword}
-                                            onChange={(e) => setForm({ ...form, adminPassword: e.target.value })}
-                                            className="input-field w-full bg-slate-900 border-slate-700"
-                                            placeholder="Minimo 6 caracteres"
-                                        />
+                            {!editingId && (
+                                <div className="pt-6 border-t border-slate-700/50">
+                                    <h3 className="text-sm font-bold text-emerald-400 uppercase tracking-wider mb-4">Credenciales del Administrador</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-300 mb-2">Correo Electronico</label>
+                                            <input
+                                                required
+                                                type="email"
+                                                value={form.adminEmail}
+                                                onChange={(e) => setForm({ ...form, adminEmail: e.target.value })}
+                                                className="input-field w-full bg-slate-900 border-slate-700"
+                                                placeholder="admin@ejemplo.com"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-300 mb-2">Contrasena Inicial</label>
+                                            <input
+                                                required
+                                                type="text"
+                                                value={form.adminPassword}
+                                                onChange={(e) => setForm({ ...form, adminPassword: e.target.value })}
+                                                className="input-field w-full bg-slate-900 border-slate-700"
+                                                placeholder="Minimo 6 caracteres"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            )}
 
                             <div className="pt-6 border-t border-slate-700/50">
                                 <h3 className="text-sm font-bold text-purple-400 uppercase tracking-wider mb-4">Configuración Agente IA</h3>
+
+                                {/* ===== TIPO PRESTADOR - Campo Destacado ===== */}
+                                <div className="mb-6 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <span className="text-amber-400 text-lg">👤</span>
+                                        <div>
+                                            <p className="text-sm font-bold text-amber-300">Tipo de Prestador de Servicio</p>
+                                            <p className="text-xs text-slate-400">Determina cómo el agente nombra a sus proveedores en las conversaciones</p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Tipo (predefinido)</label>
+                                            <select
+                                                value={form.tipo_prestador}
+                                                onChange={(e) => {
+                                                    const presets: Record<string, string> = {
+                                                        'barbero': 'Barbero',
+                                                        'estilista': 'Estilista',
+                                                        'pedicurista': 'Pedicurista',
+                                                        'manicurista': 'Manicurista',
+                                                        'terapeuta': 'Terapeuta',
+                                                        'entrenador': 'Entrenador',
+                                                        'medico': 'Médico',
+                                                        'custom': form.tipo_prestador_label || ''
+                                                    }
+                                                    setForm({
+                                                        ...form,
+                                                        tipo_prestador: e.target.value,
+                                                        tipo_prestador_label: presets[e.target.value] || form.tipo_prestador_label
+                                                    })
+                                                }}
+                                                className="input-field w-full bg-slate-900 border-slate-700 text-sm"
+                                            >
+                                                <option value="barbero">✂️ Barbero/a (Barberías)</option>
+                                                <option value="estilista">💇 Estilista (Salones)</option>
+                                                <option value="pedicurista">💅 Pedicurista (Manicure/Pedicure)</option>
+                                                <option value="manicurista">💅 Manicurista</option>
+                                                <option value="terapeuta">🧘 Terapeuta (Spas / Masajes)</option>
+                                                <option value="entrenador">💪 Entrenador/a (Gyms)</option>
+                                                <option value="medico">👨‍⚕️ Médico/a (Consultorios)</option>
+                                                <option value="custom">✏️ Personalizado</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                                                Etiqueta qué verá el cliente
+                                                {form.tipo_prestador !== 'custom' && <span className="ml-1 text-amber-400 text-[10px]">(auto)</span>}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={form.tipo_prestador_label}
+                                                onChange={(e) => setForm({ ...form, tipo_prestador_label: e.target.value })}
+                                                className="input-field w-full bg-slate-900 border-slate-700 text-sm"
+                                                placeholder="Ej. Estilista, Entrenadora..."
+                                                readOnly={form.tipo_prestador !== 'custom'}
+                                            />
+                                            <p className="text-[10px] text-slate-500 mt-1">
+                                                El agente dirá: "Tu <strong className="text-amber-300">{form.tipo_prestador_label}</strong> disponible es..."
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     <div>
                                         <label className="block text-sm font-medium text-slate-300 mb-2">Nombre del Agente</label>
@@ -379,13 +491,16 @@ export default function GestorNegocios() {
                             <div className="flex justify-end gap-3 pt-4">
                                 <button
                                     type="button"
-                                    onClick={() => setIsCreating(false)}
+                                    onClick={() => {
+                                        setIsCreating(false)
+                                        setEditingId(null)
+                                    }}
                                     className="px-6 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700 transition"
                                 >
                                     Cancelar
                                 </button>
                                 <button type="submit" className="btn-primary px-8 py-2 shadow-emerald-500/20 shadow-lg">
-                                    Finalizar y Crear Negocio
+                                    {editingId ? 'Guardar Cambios' : 'Finalizar y Crear Negocio'}
                                 </button>
                             </div>
                         </form>
@@ -405,9 +520,17 @@ export default function GestorNegocios() {
                                     </div>
                                     {s.slug && <p className="text-xs text-slate-400 font-mono mt-1">/{s.slug}</p>}
                                 </div>
-                                <span className={`px-2 py-1 rounded-md text-xs font-bold ${s.activa ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-                                    {s.activa ? 'ACTIVO' : 'INACTIVO'}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold ${s.activa ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                                        {s.activa ? 'ACTIVO' : 'INACTIVO'}
+                                    </span>
+                                    <button 
+                                        onClick={() => startEditing(s)}
+                                        className="p-1 px-2 rounded bg-slate-700/50 text-slate-400 hover:text-white hover:bg-slate-600 transition text-[10px] font-bold"
+                                    >
+                                        EDITAR
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Stats Grid */}

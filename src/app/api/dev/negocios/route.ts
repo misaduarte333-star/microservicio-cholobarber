@@ -56,7 +56,8 @@ export async function POST(req: NextRequest) {
     try {
         const { 
             nombre, slug, plan, adminEmail, adminPassword, telefono_whatsapp,
-            agent_name, agent_personality, agent_instance_name, agent_evolution_key
+            agent_name, agent_personality, agent_instance_name, agent_evolution_key,
+            tipo_prestador, tipo_prestador_label
         } = await req.json()
 
         if (!nombre || !slug || !adminEmail || !adminPassword || !telefono_whatsapp) {
@@ -87,7 +88,9 @@ export async function POST(req: NextRequest) {
                     agent_personality,
                     agent_instance_name,
                     agent_evolution_key,
-                    agent_enabled: true
+                    agent_enabled: true,
+                    tipo_prestador: tipo_prestador || 'barbero',
+                    tipo_prestador_label: tipo_prestador_label || 'Barbero'
                 }
             ])
             .select()
@@ -132,9 +135,18 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
     try {
-        const { id, activa } = await req.json()
+        const body = await req.json()
+        const { id, ...updates } = body
+
+        if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 })
+
         const supabase = createClient(supabaseUrl, supabaseServiceKey)
-        const { error } = await supabase.from('sucursales').update({ activa }).eq('id', id)
+        
+        const { error } = await supabase
+            .from('sucursales')
+            .update(updates)
+            .eq('id', id)
+
         if (error) throw error
         return NextResponse.json({ success: true })
     } catch (error: any) {

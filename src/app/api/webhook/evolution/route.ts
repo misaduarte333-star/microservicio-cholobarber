@@ -122,6 +122,8 @@ export async function POST(req: Request) {
                 personality: sucursal.agent_personality || 'friendly',
                 timezone: 'America/Hermosillo',
                 customPrompt: sucursal.agent_custom_prompt,
+                tipoPrestador: sucursal.tipo_prestador || 'barbero',
+                tipoPrestadorLabel: sucursal.tipo_prestador_label || 'Barbero',
                 aiProvider: provider as any,
                 aiModel: aiModel,
                 openaiKey,

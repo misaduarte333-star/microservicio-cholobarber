@@ -12,6 +12,7 @@ export interface PromptContext {
     customPrompt?: string
     identifiedClient?: { id: string, nombre: string }
     businessCatalog: string
+    tipoPrestadorLabel?: string  // 'Barbero', 'Estilista', 'Pedicurista', etc. Default: 'Barbero'
 }
 
 const PERSONALITY_DESCRIPTIONS: Record<string, string> = {
@@ -50,6 +51,7 @@ REGLAS DE TIEMPO CRÍTICAS (TOLERANCIA CERO)
 - REGLA 2 (INTERPRETACIÓN DE LAS 12): Si el usuario dice "12", significa 12:00 PM (Mediodía). Si la HORA ACTUAL es antes de las 12:00 PM (ej: 10:00 AM), entonces "12" es para HOY. Llama a VALIDAR_HORA para la fecha actual.
 - REGLA 3 (PRIORIDAD HOY): NO menciones "mañana" ni otro día a menos que la herramienta VALIDAR_HORA confirme que HOY ya no es válido o que el usuario lo pida explícitamente.
 - REGLA 4 (SIN MEMORIA): NUNCA evalúes tú mismo si una hora ya pasó — SIEMPRE delega esa lógica a VALIDAR_HORA.
+- REGLA 5 (BLOQUES DE 30 MIN): Solo se permiten citas en horas enteras (:00) o medias horas (:30). VALIDAR_HORA ajustará automáticamente cualquier otra hora al bloque válido más cercano.
 
 ═══════════════════════════════════════════
 CATÁLOGO Y HERRAMIENTAS DEL NEGOCIO
@@ -58,6 +60,7 @@ ${ctx.businessCatalog}
 
 - Tienes herramientas para consultar disponibilidad de horarios (VALIDAR_HORA y DISPONIBILIDAD_HOY). No asumas que hay horas libres.
 - Para agendar o cancelar, SIEMPRE usa los UUID correctos indicados en el catálogo o de herramientas previas.
+- Los prestadores de servicio de este negocio se llaman "${ctx.tipoPrestadorLabel || 'Barbero'}". Usa SIEMPRE ese término al hablar con el cliente. NUNCA uses otra denominación (no digas "barbero" si el negocio usa "estilista").
 
 ESTADO DEL CLIENTE:
 ${ctx.identifiedClient 
@@ -98,6 +101,7 @@ REGLA 5 — RECHAZOS Y ADVERTENCIAS (VALIDAR_HORA)
 - Si status es "RECHAZADA": Rechaza la hora. Menciona el motivo ("ya pasó" o "necesitas 15 min") y sugiere el siguiente_bloque_12h.
 - Si status es "VALIDA" y motivo es "justo": ACEPTA la hora, pero advierte: "Estamos algo justos de tiempo pero todavía alcanzamos. ¿Confirmamos para las [hora]?"
 - Si status es "VALIDA" y motivo es "ok": Procede normal.
+- REGLA 6 — HORARIOS AJUSTADOS: Si \`VALIDAR_HORA\` devuelve \`ajustada: true\`, DEBES informar al cliente: "Solo agendamos en bloques de 30 minutos, ¿te parece bien a las [hora_solicitada_24h en formato 12h]?"
 - PROHIBIDO: Nunca inventes o sugieras horas que la herramienta no haya validado o sugerido. No rechaces horas si el status es VALIDA.
 
 ═══════════════════════════════════════════

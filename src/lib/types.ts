@@ -62,6 +62,8 @@ export interface Sucursal {
     agent_provider: 'openai' | 'anthropic' | 'groq' | null
     agent_model: string | null
     agent_enabled: boolean
+    tipo_prestador: string | null
+    tipo_prestador_label: string | null
 }
 
 

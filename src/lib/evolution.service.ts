@@ -91,4 +91,37 @@ export class EvolutionService {
             return { success: false, message: error.message }
         }
     }
+
+    /**
+     * Envía un mensaje de texto simple a través de Evolution API.
+     */
+    public static async sendTextMessage(baseUrl: string, apikey: string, instance: string, phone: string, text: string): Promise<boolean> {
+        try {
+            const evoBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+            const res = await fetch(`${evoBaseUrl}message/sendText/${instance}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    apikey
+                },
+                body: JSON.stringify({
+                    number: phone,
+                    text: text,
+                    delay: 1200,
+                    linkPreview: false
+                })
+            })
+
+            if (!res.ok) {
+                const err = await res.text()
+                console.error(`[EvolutionService] Error enviando mensaje a ${phone}:`, err)
+                return false
+            }
+
+            return true
+        } catch (error: any) {
+            console.error(`[EvolutionService] Error catastrófico enviando mensaje a ${phone}:`, error.message)
+            return false
+        }
+    }
 }

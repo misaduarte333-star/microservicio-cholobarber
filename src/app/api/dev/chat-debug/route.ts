@@ -111,6 +111,8 @@ async function handleChatMessage(body: any, req: Request) {
         openaiKey: provider === 'openai' ? apiKey : process.env.OPENAI_API_KEY || '',
         anthropicKey: provider === 'anthropic' ? apiKey : process.env.ANTHROPIC_API_KEY || '',
         groqKey: provider === 'groq' ? apiKey : process.env.GROQ_API_KEY || '',
+        tipoPrestador: sucursal.tipo_prestador || 'barbero',
+        tipoPrestadorLabel: sucursal.tipo_prestador_label || 'Barbero'
     }
 
     const result = await AgentService.run(

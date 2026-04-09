@@ -17,6 +17,8 @@ export interface AgentContext {
     personality: string
     timezone: string
     customPrompt?: string | null
+    tipoPrestador?: string       // 'barbero' | 'estilista' | 'pedicurista' | etc.
+    tipoPrestadorLabel?: string  // Etiqueta legible: 'Barbero', 'Estilista', etc.
     // Multi Provider support
     aiProvider: 'openai' | 'anthropic' | 'groq'
     aiModel: string
@@ -63,7 +65,7 @@ export class AgentService {
                 supabase.from('sucursales').select('nombre, direccion, telefono_whatsapp, horario_apertura, created_at, updated_at')
                     .eq('id', ctx.sucursalId).single(),
                 supabase.from('clientes').select('id, nombre').eq('telefono', phoneNormalized).limit(1).maybeSingle(),
-                CatalogCacheService.getCatalogContext(ctx.sucursalId)
+                CatalogCacheService.getCatalogContext(ctx.sucursalId, ctx.tipoPrestadorLabel || 'Barbero')
             ])
 
             if (sucursalRes.error) throw new Error(`Error sucursal data: ${sucursalRes.error.message}`)
@@ -81,7 +83,8 @@ export class AgentService {
             timezone: ctx.timezone,
             customPrompt: ctx.customPrompt || undefined,
             identifiedClient: clienteRes?.data || undefined,
-            businessCatalog: businessCatalogStr
+            businessCatalog: businessCatalogStr,
+            tipoPrestadorLabel: ctx.tipoPrestadorLabel || 'Barbero'
         })
 
         // 3. Crear LLM dinámico según el proveedor configurado
