@@ -10,6 +10,24 @@ const CRON_SECRET = process.env.CRON_SECRET || 'cholo-secret-cron-2026'
 
 const APP_TIMEZONE = 'America/Hermosillo'
 
+function sanitizePhone(phone: string): string {
+    // 1. Limpiar todo lo que no sea número
+    let cleaned = phone.replace(/\D/g, '')
+
+    // 2. Si tiene 10 dígitos (Número local de México), agregar 521
+    if (cleaned.length === 10) {
+        return `521${cleaned}`
+    }
+
+    // 3. Caso especial México: si empieza con 52 y tiene 12 dígitos (falta el '1' móvil)
+    // Ejemplo: 52 662 278... -> 52 1 662 278...
+    if (cleaned.startsWith('52') && cleaned.length === 12) {
+        return `521${cleaned.substring(2)}`
+    }
+
+    return cleaned
+}
+
 export async function GET(req: NextRequest) {
     try {
         // 1. Validar Secret
@@ -75,13 +93,15 @@ export async function GET(req: NextRequest) {
                 
                 const horaLocal = formatInTimeZone(new Date(cita.timestamp_inicio), APP_TIMEZONE, 'h:mm a')
                 
+                const phone = sanitizePhone(cita.cliente_telefono)
+                
                 const message = `Hola ${cita.cliente_nombre}, te recordamos tu cita de hoy a las ${horaLocal} con el ${label} ${barbero.nombre}. ¡Te esperamos!`
                 
                 const sent = await EvolutionService.sendTextMessage(
                     globalConfig.evolution_api_url,
                     apikey,
                     instance,
-                    cita.cliente_telefono,
+                    phone,
                     message
                 )
 
@@ -116,13 +136,15 @@ export async function GET(req: NextRequest) {
                 
                 const horaLocal = formatInTimeZone(new Date(cita.timestamp_inicio), APP_TIMEZONE, 'h:mm a')
                 
+                const phone = sanitizePhone(cita.cliente_telefono)
+                
                 const message = `Hola ${cita.cliente_nombre}, ¿vas en camino? Tu cita registrada era a las ${horaLocal}. Si deseas, podemos intentar reagendarla para un espacio disponible más tarde hoy. ¿Deseas que busque un lugar?`
                 
                 const sent = await EvolutionService.sendTextMessage(
                     globalConfig.evolution_api_url,
                     apikey,
                     instance,
-                    cita.cliente_telefono,
+                    phone,
                     message
                 )
 
