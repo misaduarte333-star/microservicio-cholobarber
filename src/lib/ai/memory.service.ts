@@ -25,7 +25,7 @@ export { pool }
  */
 class FreshContextHistory extends BaseChatMessageHistory {
     lc_namespace = ['cholobot', 'memory']
-    private static readonly MAX_MESSAGES = 50
+    private static readonly MAX_MESSAGES = 10
 
     constructor(
         private inner: PostgresChatMessageHistory,

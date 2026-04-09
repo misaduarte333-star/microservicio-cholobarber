@@ -8,6 +8,7 @@ import { normalizePhone } from './tools/appointment.tools'
 import { getAISupabaseClient } from './tools/business.tools'
 import { MemoryService } from './memory.service'
 import { MetricsService } from './metrics.service'
+import { CatalogCacheService } from './catalog-cache.service'
 
 export interface AgentContext {
     sucursalId: string
@@ -31,6 +32,7 @@ export interface AgentStep {
     output?: any
     timestamp: number
     hasError?: boolean
+    databaseInteraction?: string | string[]
 }
 
 export interface AgentRunResult {
@@ -55,20 +57,15 @@ export class AgentService {
         const supabase = getAISupabaseClient()
         const phoneNormalized = normalizePhone(senderPhone)
 
-        let barberosRes, serviciosRes, sucursalRes, clienteRes
+        let sucursalRes, clienteRes, businessCatalogStr
         try {
-            [barberosRes, serviciosRes, sucursalRes, clienteRes] = await Promise.all([
-                supabase.from('barberos').select('id, nombre, horario_laboral, bloqueo_almuerzo')
-                    .eq('sucursal_id', ctx.sucursalId).eq('activo', true).order('nombre'),
-                supabase.from('servicios').select('id, nombre, duracion_minutos, precio')
-                    .eq('sucursal_id', ctx.sucursalId).eq('activo', true).order('nombre'),
+            [sucursalRes, clienteRes, businessCatalogStr] = await Promise.all([
                 supabase.from('sucursales').select('nombre, direccion, telefono_whatsapp, horario_apertura, created_at, updated_at')
                     .eq('id', ctx.sucursalId).single(),
-                supabase.from('clientes').select('id, nombre').eq('telefono', phoneNormalized).limit(1).maybeSingle()
+                supabase.from('clientes').select('id, nombre').eq('telefono', phoneNormalized).limit(1).maybeSingle(),
+                CatalogCacheService.getCatalogContext(ctx.sucursalId)
             ])
 
-            if (barberosRes.error) throw new Error(`Error barberos: ${barberosRes.error.message}`)
-            if (serviciosRes.error) throw new Error(`Error servicios: ${serviciosRes.error.message}`)
             if (sucursalRes.error) throw new Error(`Error sucursal data: ${sucursalRes.error.message}`)
 
         } catch (dbError: any) {
@@ -76,17 +73,15 @@ export class AgentService {
             throw new Error(`Error en base de datos al cargar contexto: ${dbError.message}`)
         }
 
-        // 3. Construir Prompt del Sistema con datos pre-cargados
+        // 3. Construir Prompt del Sistema con datos mínimos
         const systemPromptStr = buildSystemPrompt({
             nombre: ctx.nombre,
             agentName: ctx.agentName,
             personality: ctx.personality,
             timezone: ctx.timezone,
             customPrompt: ctx.customPrompt || undefined,
-            barberos: barberosRes.data || [],
-            servicios: serviciosRes.data || [],
-            sucursal: sucursalRes.data || undefined,
-            identifiedClient: clienteRes?.data || undefined
+            identifiedClient: clienteRes?.data || undefined,
+            businessCatalog: businessCatalogStr
         })
 
         // 3. Crear LLM dinámico según el proveedor configurado
@@ -157,6 +152,7 @@ export class AgentService {
             // 7b. Recopilar pasos del agente para el panel de debug
             const steps: AgentStep[] = []
             const toolInputs: Record<string, any> = {}
+            let dbInteraction: string | string[] | undefined = undefined
 
             for (const msg of result.messages) {
                 const msgType = msg._getType?.()
@@ -187,6 +183,14 @@ export class AgentService {
                     try {
                         parsedContent = JSON.parse(rawContent)
                         hasError = !!(parsedContent.error || parsedContent.status === 'error' || parsedContent.status === 'error_tecnico_db' || parsedContent.error_code)
+                        
+                        // Extraer metadatos de base de datos si existen
+                        if (parsedContent._databaseInteraction) {
+                            dbInteraction = parsedContent._databaseInteraction
+                            delete parsedContent._databaseInteraction
+                            // Actualizar el contenido del mensaje original para que el LLM no vea los metadatos
+                            msg.content = JSON.stringify(parsedContent)
+                        }
                     } catch {
                         parsedContent = rawContent.substring(0, 1000)
                         hasError = rawContent.toLowerCase().startsWith('error')
@@ -198,7 +202,8 @@ export class AgentService {
                         input: toolCallId ? toolInputs[toolCallId] : undefined,
                         output: parsedContent,
                         timestamp: Date.now(),
-                        hasError
+                        hasError,
+                        databaseInteraction: dbInteraction
                     })
                 }
             }
@@ -220,11 +225,21 @@ export class AgentService {
                 inputPreview: input.substring(0, 1000),
                 outputPreview: outputText.substring(0, 1000),
                 latencyMs,
-                toolsUsed: toolMessages.map((m: any) => ({
-                    name: m.name ?? 'unknown',
-                    input: toolInputs[(m as any).tool_call_id] || {},
-                    output: String(m.content ?? '').substring(0, 500)
-                })),
+                toolsUsed: toolMessages.map((m: any) => {
+                    const rawContent = String(m.content ?? '')
+                    let dbInt = undefined
+                    try {
+                        const parsed = JSON.parse(rawContent)
+                        dbInt = parsed._databaseInteraction
+                    } catch {}
+
+                    return {
+                        name: m.name ?? 'unknown',
+                        input: toolInputs[(m as any).tool_call_id] || {},
+                        output: rawContent.substring(0, 500),
+                        databaseInteraction: dbInt
+                    }
+                }),
                 source: 'webhook'
             })
 

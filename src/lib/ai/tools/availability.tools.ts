@@ -59,7 +59,8 @@ export const makeValidarHoraTool = (timezone: string = 'America/Hermosillo') => 
                         advertencia: false,
                         hora_solicitada_24h: `${r.h.toString().padStart(2, '0')}:${r.m.toString().padStart(2, '0')}`,
                         siguiente_bloque: null,
-                        siguiente_bloque_12h: null
+                        siguiente_bloque_12h: null,
+                        _databaseInteraction: 'Lógica Local'
                     })
                 }
 
@@ -270,7 +271,8 @@ function makeDisponibilidadBase(sucursalId: string, toolName: string, descriptio
                 return JSON.stringify({
                     slot_revisado: formatInTimeZone(dateStart, timezone, 'yyyy-MM-dd HH:mm'),
                     dia: dayName,
-                    barberos: resultRows
+                    barberos: resultRows,
+                    _databaseInteraction: ['sucursales', 'barberos', 'citas', 'bloqueos']
                 })
             } catch (error: any) {
                 console.error('[IA_DIAGNOSTIC] CRITICAL_TOOL_ERROR:', error.message)

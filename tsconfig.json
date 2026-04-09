@@ -38,6 +38,8 @@
         "node_modules",
         "temp_microservice",
         "temp_microservice_old",
-        "test_avail.ts"
+        "test_avail.ts",
+        "scratch",
+        "test-prompt-fix.ts"
     ]
 }

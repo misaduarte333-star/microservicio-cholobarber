@@ -32,18 +32,29 @@ export async function GET(req: Request) {
             customPrompt: configRes.data?.custom_prompt || '',
         }
 
+        // Construir catálogo inline para preview del panel admin (sin Redis, directo desde DB)
+        const servicios = serviciosRes.data || []
+        const barberos = barberosRes.data || []
+        let businessCatalog = `═══════════════════════════════════════════\nCATÁLOGO DEL NEGOCIO (PRE-CARGADO)\n═══════════════════════════════════════════\n[SERVICIOS DISPONIBLES]\n`
+        servicios.forEach((s: any) => {
+            const precio = s.precio ? `$${s.precio}` : 'Precio variable'
+            businessCatalog += `- ${s.nombre} | Duración: ${s.duracion_minutos} min | Precio: ${precio} | (Servicio_ID: ${s.id})\n`
+        })
+        businessCatalog += `\n[BARBEROS DISPONIBLES]\n`
+        barberos.forEach((b: any) => {
+            businessCatalog += `- ${b.nombre} | (Barbero_ID: ${b.id})\n`
+        })
+
         const systemPromptStr = buildSystemPrompt({
             nombre: ctx.nombre,
             agentName: ctx.agentName,
             personality: ctx.personality,
             timezone: ctx.timezone,
             customPrompt: ctx.customPrompt || undefined,
-            barberos: barberosRes.data || [],
-            servicios: serviciosRes.data || [],
-            sucursal: sucursalRes.data || undefined
+            businessCatalog
         })
 
-        // Fake variables replacement to show how it looks
+        // Reemplazar variables de runtime para previsualización
         const currentDate = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
         const currentTime = new Intl.DateTimeFormat('es-MX', { timeZone: ctx.timezone, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
 
@@ -52,7 +63,7 @@ export async function GET(req: Request) {
             .replace(/{current_time}/g, currentTime)
             .replace(/{sender_phone}/g, '[Teléfono Cliente]')
 
-        // Buscar última fecha (usamos created_at y updated_at si existen)
+        // Buscar última fecha de actualización
         let lastUpdatedTimestamp = 0
         if (sucursalRes.data?.created_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(sucursalRes.data.created_at).getTime())
         barberosRes.data?.forEach((b: any) => { if (b.created_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(b.created_at).getTime()) })

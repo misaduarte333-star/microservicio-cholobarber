@@ -18,6 +18,7 @@ interface AgentStep {
     output?: any
     timestamp: number
     hasError?: boolean
+    databaseInteraction?: string | string[]
 }
 
 interface StepGroup {
@@ -80,6 +81,11 @@ function StepCard({ step }: { step: AgentStep }) {
                         {isError && step.type === 'tool_result' ? 'Error en herramienta' : STEP_LABELS[step.type]}
                         {step.name && (
                             <span className={`ml-1.5 font-mono text-[11px] ${isError ? 'text-red-300' : 'text-amber-400'}`}>{step.name}</span>
+                        )}
+                        {step.databaseInteraction && (
+                            <span className="ml-2 text-[9px] text-slate-500 font-mono bg-slate-800/80 px-1 py-0.5 rounded border border-slate-700/50">
+                                DB: {Array.isArray(step.databaseInteraction) ? step.databaseInteraction.join(', ') : step.databaseInteraction}
+                            </span>
                         )}
                     </p>
                     {isError && !expanded && (

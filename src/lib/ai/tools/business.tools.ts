@@ -34,8 +34,8 @@ export const makeConsultarServiciosTool = (sucursalId: string) => {
                     .order('nombre')
 
                 if (error) throw error
-                if (!data?.length) return JSON.stringify({ message: 'No hay servicios activos.' })
-                return JSON.stringify(data)
+                if (!data?.length) return JSON.stringify({ message: 'No hay servicios activos.', _databaseInteraction: 'servicios' })
+                return JSON.stringify({ servicios: data, _databaseInteraction: 'servicios' })
             } catch (error: any) {
                 return `Error al consultar servicios: ${error.message}`
             }
@@ -63,8 +63,8 @@ export const makeConsultarBarberosTool = (sucursalId: string) => {
                     .order('nombre')
 
                 if (error) throw error
-                if (!data?.length) return JSON.stringify({ message: 'No hay barberos activos.' })
-                return JSON.stringify(data)
+                if (!data?.length) return JSON.stringify({ message: 'No hay barberos activos.', _databaseInteraction: 'barberos' })
+                return JSON.stringify({ barberos: data, _databaseInteraction: 'barberos' })
             } catch (error: any) {
                 return `Error al consultar barberos: ${error.message}`
             }
@@ -91,7 +91,7 @@ export const makeConsultarSucursalTool = (sucursalId: string) => {
                     .single()
 
                 if (error) throw error
-                return JSON.stringify(data)
+                return JSON.stringify({ sucursal: data, _databaseInteraction: 'sucursales' })
             } catch (error: any) {
                 return `Error al consultar sucursal: ${error.message}`
             }

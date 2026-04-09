@@ -48,15 +48,26 @@ async function getLivePromptData(supabase: any, sucursalId: string) {
         customPrompt: configRes.data?.custom_prompt || '',
     }
 
+    // Construir catálogo inline para vista previa del Monitor (sin Redis)
+    const servicios = serviciosRes.data || []
+    const barberos = barberosRes.data || []
+    let businessCatalog = `═══════════════════════════════════════════\nCATÁLOGO DEL NEGOCIO (PRE-CARGADO)\n═══════════════════════════════════════════\n[SERVICIOS DISPONIBLES]\n`
+    servicios.forEach((s: any) => {
+        const precio = s.precio ? `$${s.precio}` : 'Precio variable'
+        businessCatalog += `- ${s.nombre} | Duración: ${s.duracion_minutos} min | Precio: ${precio} | (Servicio_ID: ${s.id})\n`
+    })
+    businessCatalog += `\n[BARBEROS DISPONIBLES]\n`
+    barberos.forEach((b: any) => {
+        businessCatalog += `- ${b.nombre} | (Barbero_ID: ${b.id})\n`
+    })
+
     const systemPromptStr = buildSystemPrompt({
         nombre: ctx.nombre,
         agentName: ctx.agentName,
         personality: ctx.personality,
         timezone: ctx.timezone,
         customPrompt: ctx.customPrompt || undefined,
-        barberos: barberosRes.data || [],
-        servicios: serviciosRes.data || [],
-        sucursal: sucursalRes.data || undefined
+        businessCatalog
     })
 
     const currentDate = new Date().toLocaleDateString('en-CA', { timeZone: ctx.timezone })
@@ -75,6 +86,7 @@ async function getLivePromptData(supabase: any, sucursalId: string) {
 
     return { prompt: finalSystemPrompt, lastUpdated: new Date(lastUpdatedTimestamp || Date.now()).toISOString() }
 }
+
 
 export default async function MonitorPage({ params, searchParams }: PageProps) {
     const { id: sucursalId } = await params

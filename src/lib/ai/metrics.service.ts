@@ -4,6 +4,7 @@ export interface ToolStep {
     name: string
     input: Record<string, any>
     output: string
+    databaseInteraction?: string | string[]
 }
 
 export interface RequestLog {

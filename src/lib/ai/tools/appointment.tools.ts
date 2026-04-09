@@ -1,6 +1,8 @@
 import { DynamicStructuredTool } from '@langchain/core/tools'
 import { z } from 'zod'
+import { toDate, formatInTimeZone } from 'date-fns-tz'
 import { getAISupabaseClient } from './business.tools'
+import { APP_TIMEZONE } from '../../timezone'
 
 /**
  * Normaliza un número de teléfono de WhatsApp/Evolution API.
@@ -48,7 +50,7 @@ export const makeBuscarOCrearClienteTool = (sucursalId: string) => {
                     .maybeSingle()
 
                 if (existing) {
-                    return JSON.stringify({ encontrado: true, cliente: existing })
+                    return JSON.stringify({ encontrado: true, cliente: existing, _databaseInteraction: 'clientes' })
                 }
 
                 if (!nombre) {
@@ -66,7 +68,7 @@ export const makeBuscarOCrearClienteTool = (sucursalId: string) => {
                     .single()
 
                 if (error) throw error
-                return JSON.stringify({ encontrado: false, registrado: true, cliente: nuevo })
+                return JSON.stringify({ encontrado: false, registrado: true, cliente: nuevo, _databaseInteraction: 'clientes' })
             } catch (error: any) {
                 return JSON.stringify({ status: 'error', message: error.message })
             }
@@ -116,11 +118,14 @@ export const makeMisCitasTool = (sucursalId: string) => {
                     cliente_nombre: c.cliente_nombre,
                     timestamp_inicio: c.timestamp_inicio,
                     timestamp_fin: c.timestamp_fin,
+                    // Añadimos formatos locales para que el agente no se confunda con UTC
+                    inicio_local: formatInTimeZone(new Date(c.timestamp_inicio), APP_TIMEZONE, 'yyyy-MM-dd HH:mm'),
+                    fin_local: formatInTimeZone(new Date(c.timestamp_fin), APP_TIMEZONE, 'yyyy-MM-dd HH:mm'),
                     estado: c.estado,
                     notas: c.notas
                 }))
 
-                return JSON.stringify(flat)
+                return JSON.stringify(flat.map(f => ({ ...f, _databaseInteraction: 'citas' })))
             } catch (error: any) {
                 return JSON.stringify({ status: 'error', message: error.message })
             }
@@ -143,8 +148,8 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
             cliente_id: z.string().describe('UUID del cliente (obtenido con BUSCAR_CLIENTE)'),
             cliente_nombre: z.string().describe('Nombre del cliente'),
             cliente_telefono: z.string().describe('Teléfono del cliente'),
-            timestamp_inicio: z.string().describe('Inicio de la cita en ISO 8601 (ej: 2026-03-30T13:00:00)'),
-            timestamp_fin: z.string().describe('Fin de la cita en ISO 8601 (ej: 2026-03-30T13:40:00)')
+            timestamp_inicio: z.string().describe('Inicio de la cita en hora LOCAL de Hermosillo sin offset, formato ISO 8601 (ej: 2026-03-30T13:00:00). NO incluir Z ni +00:00.'),
+            timestamp_fin: z.string().describe('Fin de la cita en hora LOCAL de Hermosillo sin offset, formato ISO 8601 (ej: 2026-03-30T13:40:00). NO incluir Z ni +00:00.')
         }),
         func: async ({ barbero_id, servicio_id, cliente_id, cliente_nombre, cliente_telefono, timestamp_inicio, timestamp_fin }) => {
             try {
@@ -189,6 +194,13 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
 
                 const phoneClean = normalizePhone(cliente_telefono)
 
+                // Interpretar timestamps como hora local de Hermosillo (UTC-7)
+                // new Date(strSinOffset) en Node.js los trataría como UTC, causando error de -7h
+                // toDate de date-fns-tz los convierte correctamente a UTC para Supabase
+                const stripOffset = (ts: string) => ts.replace(/([+-]\d{2}:\d{2}|Z)$/, '')
+                const tsInicio = toDate(stripOffset(timestamp_inicio), { timeZone: APP_TIMEZONE })
+                const tsFin    = toDate(stripOffset(timestamp_fin),    { timeZone: APP_TIMEZONE })
+
                 const insertPayload = {
                     sucursal_id: sucursalId,
                     barbero_id,
@@ -196,8 +208,8 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
                     cliente_id,
                     cliente_nombre,
                     cliente_telefono: phoneClean,
-                    timestamp_inicio: new Date(timestamp_inicio).toISOString(),
-                    timestamp_fin: new Date(timestamp_fin).toISOString(),
+                    timestamp_inicio: tsInicio.toISOString(),
+                    timestamp_fin: tsFin.toISOString(),
                     estado: 'confirmada' as const,
                     origen: 'whatsapp' as const
                 }
@@ -229,7 +241,8 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
 
                 return JSON.stringify({
                     status: 'ok',
-                    cita: data
+                    cita: data,
+                    _databaseInteraction: 'citas'
                 })
             } catch (error: any) {
                 return JSON.stringify({ status: 'error', message: error.message, stack: error.stack?.substring(0, 200) })
@@ -269,7 +282,7 @@ export const makeCancelarCitaTool = (sucursalId: string) => {
 
                 if (error) throw error
                 if (!data?.length) return JSON.stringify({ status: 'error', error: 'No se encontró esa cita o no te pertenece.' })
-                return JSON.stringify({ status: 'ok', mensaje: 'Cita cancelada exitosamente.' })
+                return JSON.stringify({ status: 'ok', mensaje: 'Cita cancelada exitosamente.', _databaseInteraction: 'citas' })
             } catch (error: any) {
                 return JSON.stringify({ status: 'error', message: error.message })
             }
