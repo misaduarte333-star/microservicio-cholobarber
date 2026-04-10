@@ -28,9 +28,9 @@ export const makeBuscarOCrearClienteTool = (sucursalId: string) => {
     return new DynamicStructuredTool({
         name: 'BUSCAR_CLIENTE',
         description:
-            'INDISPENSABLE: Llama esta herramienta al inicio para ver si el cliente ya existe. ' +
-            'Si devuelve encontrado:true, ya tienes su nombre y su cliente_id para AGENDAR_CITA. ' +
-            'Si encontrado:false, deberás preguntarle su nombre para poder registrarlo más tarde.',
+            'Verifica si el cliente ya existe por su teléfono. ' +
+            'Si devuelve encontrado:true, ya tienes su nombre y cliente_id. ' +
+            'Si encontrado:false, es un cliente nuevo; solo pide su nombre si es necesario para agendar.',
         schema: z.object({
             telefono: z.string().describe('Teléfono del cliente'),
             nombre: z.string().optional().describe('Nombre del cliente (requerido si es nuevo)')
@@ -57,7 +57,7 @@ export const makeBuscarOCrearClienteTool = (sucursalId: string) => {
                     return JSON.stringify({ 
                         encontrado: false, 
                         mensaje: 'CLIENTE_NUEVO: El cliente no existe en la base de datos.',
-                        instruccion_para_agente: 'DEBES preguntar el nombre completo al usuario ahora mismo. No puedes agendar sin registrar su nombre.'
+                        instruccion_para_agente: 'Cliente nuevo. Puedes seguir respondiendo dudas, pero pide su nombre SOLO cuando el usuario esté listo para agendar la cita.'
                     })
                 }
 
@@ -140,11 +140,11 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
     return new DynamicStructuredTool({
         name: 'AGENDAR_CITA',
         description:
-            'ÚNICA FORMA DE CREAR UNA CITA. Ejecutar SOLO tras confirmar: nombre, barbero, servicio, hora validada y disponibilidad. ' +
-            'REQUIERE cliente_id (UUID), barbero_id (UUID) y servicio_id (UUID) obtenidos de las otras herramientas.',
+            'ÚNICA FORMA DE CREAR UNA CITA. Ejecutar SOLO tras confirmar: NOMBRE DEL CLIENTE, barbero, servicio, hora validada y disponibilidad. ' +
+            'ESTA HERRAMIENTA ES LA QUE OBLIGA A TENER EL NOMBRE DEL CLIENTE.',
         schema: z.object({
             barbero_id: z.string().describe('UUID del barbero'),
-            servicio_id: z.string().describe('UUID del servicio'),
+            servicio_id: z.string().describe('UUID del servicio (Asegúrate de que coincida con el nombre del servicio acordado con el cliente).'),
             cliente_id: z.string().describe('UUID del cliente (obtenido con BUSCAR_CLIENTE)'),
             cliente_nombre: z.string().describe('Nombre del cliente'),
             cliente_telefono: z.string().describe('Teléfono del cliente'),

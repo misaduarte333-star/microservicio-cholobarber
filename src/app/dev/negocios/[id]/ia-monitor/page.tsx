@@ -4,6 +4,7 @@ import { Code, Clock, Zap } from 'lucide-react'
 import { buildSystemPrompt } from '@/lib/ai/prompts'
 import ClearHistoryButton from '@/components/dev/ClearHistoryButton'
 import RealtimeLogListener from '@/components/dev/RealtimeLogListener'
+import PromptEditor from '@/components/dev/PromptEditor'
 
 interface PageProps {
     params: Promise<{ id: string }>
@@ -29,24 +30,23 @@ function getLocalDate(dateStr: string, tz = 'America/Mexico_City') {
 }
 
 async function getLivePromptData(supabase: any, sucursalId: string, identifiedClient?: { id: string, nombre: string } | null) {
-    const [barberosRes, serviciosRes, sucursalRes, configRes] = await Promise.all([
+    const [barberosRes, serviciosRes, sucursalRes] = await Promise.all([
         supabase.from('barberos').select('id, nombre, horario_laboral, bloqueo_almuerzo, created_at, activo')
             .eq('sucursal_id', sucursalId).eq('activo', true).order('nombre'),
         supabase.from('servicios').select('id, nombre, duracion_minutos, precio, created_at, activo')
             .eq('sucursal_id', sucursalId).eq('activo', true).order('nombre'),
-        supabase.from('sucursales').select('nombre, direccion, telefono_whatsapp, horario_apertura, created_at')
-            .eq('id', sucursalId).single(),
-        supabase.from('configuracion_ia').select('*').eq('sucursal_id', sucursalId).maybeSingle()
+        supabase.from('sucursales').select('*')
+            .eq('id', sucursalId).single()
     ])
 
     const ctx = {
         sucursalId,
-        timezone: configRes.data?.timezone || 'America/Mexico_City',
+        timezone: 'America/Hermosillo',
         nombre: sucursalRes.data?.nombre || 'Negocio',
-        agentName: configRes.data?.agent_name || 'Agente IA',
-        personality: configRes.data?.personality || 'Amable',
-        customPrompt: configRes.data?.custom_prompt || '',
-        tipoPrestadorLabel: configRes.data?.tipo_prestador_label || 'Barbero'
+        agentName: sucursalRes.data?.agent_name || 'Agente IA',
+        personality: sucursalRes.data?.agent_personality || 'Amable',
+        customPrompt: sucursalRes.data?.agent_custom_prompt || '',
+        tipoPrestadorLabel: sucursalRes.data?.tipo_prestador_label || sucursalRes.data?.tipo_prestador || 'Barbero'
     }
 
     // Construir catálogo inline para vista previa del Monitor (sin Redis)
@@ -85,9 +85,13 @@ async function getLivePromptData(supabase: any, sucursalId: string, identifiedCl
     if (sucursalRes.data?.created_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(sucursalRes.data.created_at).getTime())
     barberosRes.data?.forEach((b: any) => { if (b.created_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(b.created_at).getTime()) })
     serviciosRes.data?.forEach((s: any) => { if (s.created_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(s.created_at).getTime()) })
-    if (configRes.data?.updated_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(configRes.data.updated_at).getTime())
+    if (sucursalRes.data?.updated_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(sucursalRes.data.updated_at).getTime())
 
-    return { prompt: finalSystemPrompt, lastUpdated: new Date(lastUpdatedTimestamp || Date.now()).toISOString() }
+    return { 
+        prompt: finalSystemPrompt, 
+        lastUpdated: new Date(lastUpdatedTimestamp || Date.now()).toISOString(),
+        customPrompt: ctx.customPrompt
+    }
 }
 
 
@@ -379,6 +383,13 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
                         <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Prompt Dinámico</h2>
                     </header>
                     <div className="p-4 flex-1 overflow-y-auto scrollbar-hide space-y-4">
+                        
+                        {/* Editor de Prompt (Manual) */}
+                        <PromptEditor 
+                            sucursalId={sucursalId} 
+                            initialCustomPrompt={promptData.customPrompt || ''} 
+                        />
+
                         {/* Identificación Diagnostic */}
                         <div className="bg-slate-900/80 rounded-xl p-4 border border-fuchsia-500/30 shadow-lg shadow-fuchsia-500/5">
                             <h3 className="text-[10px] text-fuchsia-400 uppercase tracking-widest font-bold mb-3 flex items-center gap-2">
@@ -418,8 +429,8 @@ export default async function MonitorPage({ params, searchParams }: PageProps) {
                             Última act. del sistema: {new Date(promptData.lastUpdated).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit' })}
                         </div>
                         <div className="bg-slate-900/80 rounded-xl p-3 border border-slate-700/50">
-                            <h3 className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-2">Prompt Dinámico (Contexto)</h3>
-                            <pre className="text-[11px] font-mono text-slate-300 whitespace-pre-wrap leading-relaxed">
+                            <h3 className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-2">Prompt Dinámico (Contexto Final)</h3>
+                            <pre className="text-[11px] font-mono text-slate-400 whitespace-pre-wrap leading-relaxed italic">
                                 {promptData.prompt}
                             </pre>
                         </div>

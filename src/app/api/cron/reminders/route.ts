@@ -67,11 +67,11 @@ export async function GET(req: NextRequest) {
             const minAntes = suc.minutos_antes_recordatorio || 15
             const minTarde = suc.minutos_tardanza_mensaje || 15
 
-            // Rangos dinámicos (+/- 7.5 minutos de ventana para el cron de 10-15 min)
+            // Rangos simétricos (+/- 5 minutos de ventana para centrar el aviso)
             const startMin = addMinutes(now, minAntes - 5).toISOString()
-            const startMax = addMinutes(now, minAntes + 10).toISOString()
+            const startMax = addMinutes(now, minAntes + 5).toISOString()
 
-            const endMin = subMinutes(now, minTarde + 10).toISOString()
+            const endMin = subMinutes(now, minTarde + 5).toISOString()
             const endMax = subMinutes(now, minTarde - 5).toISOString()
 
             // --- PROCESAR RECORDATORIOS (ANUNCIO/CONFIRMACIÓN) ---

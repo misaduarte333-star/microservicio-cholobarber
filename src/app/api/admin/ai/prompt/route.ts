@@ -13,23 +13,22 @@ export async function GET(req: Request) {
     try {
         const supabase = getAISupabaseClient()
 
-        const [barberosRes, serviciosRes, sucursalRes, configRes] = await Promise.all([
+        const [barberosRes, serviciosRes, sucursalRes] = await Promise.all([
             supabase.from('barberos').select('id, nombre, horario_laboral, bloqueo_almuerzo, created_at, activo')
                 .eq('sucursal_id', sucursalId).eq('activo', true).order('nombre'),
             supabase.from('servicios').select('id, nombre, duracion_minutos, precio, created_at, activo')
                 .eq('sucursal_id', sucursalId).eq('activo', true).order('nombre'),
-            supabase.from('sucursales').select('nombre, direccion, telefono_whatsapp, horario_apertura, created_at')
-                .eq('id', sucursalId).single(),
-            supabase.from('configuracion_ia').select('*').eq('sucursal_id', sucursalId).maybeSingle()
+            supabase.from('sucursales').select('*')
+                .eq('id', sucursalId).single()
         ])
 
         const ctx = {
             sucursalId,
-            timezone: configRes.data?.timezone || 'America/Mexico_City',
+            timezone: 'America/Hermosillo', // Defaulting for now as per production webhook
             nombre: sucursalRes.data?.nombre || 'Negocio',
-            agentName: configRes.data?.agent_name || 'Agente IA',
-            personality: configRes.data?.personality || 'Amable',
-            customPrompt: configRes.data?.custom_prompt || '',
+            agentName: sucursalRes.data?.agent_name || 'Agente IA',
+            personality: sucursalRes.data?.agent_personality || 'Amable',
+            customPrompt: sucursalRes.data?.agent_custom_prompt || '',
         }
 
         // Construir catálogo inline para preview del panel admin (sin Redis, directo desde DB)
@@ -68,7 +67,7 @@ export async function GET(req: Request) {
         if (sucursalRes.data?.created_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(sucursalRes.data.created_at).getTime())
         barberosRes.data?.forEach((b: any) => { if (b.created_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(b.created_at).getTime()) })
         serviciosRes.data?.forEach((s: any) => { if (s.created_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(s.created_at).getTime()) })
-        if (configRes.data?.updated_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(configRes.data.updated_at).getTime())
+        if (sucursalRes.data?.updated_at) lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, new Date(sucursalRes.data.updated_at).getTime())
 
         return NextResponse.json({ 
             prompt: finalSystemPrompt, 

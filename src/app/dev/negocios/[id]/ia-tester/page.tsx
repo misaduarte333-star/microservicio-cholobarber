@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { Zap } from 'lucide-react'
 
 interface Message {
     id: string
@@ -145,6 +146,9 @@ export default function ChatTester() {
     const [phone] = useState('555-DEV-TEST') // Identidad de prueba por defecto
     const [persistentPrompt, setPersistentPrompt] = useState<string | null>(null)
     const [promptUpdatedAt, setPromptUpdatedAt] = useState<string | null>(null)
+    const [editableCustomPrompt, setEditableCustomPrompt] = useState<string>('')
+    const [isSavingPrompt, setIsSavingPrompt] = useState(false)
+    const [isEditingPrompt, setIsEditingPrompt] = useState(false)
     const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
     const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -156,8 +160,40 @@ export default function ChatTester() {
     }
 
     useEffect(() => {
+        // Cargar configuración inicial
+        fetch(`/api/dev/sucursal/${sucursalId}/config`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.agent_custom_prompt) {
+                    setEditableCustomPrompt(data.agent_custom_prompt)
+                }
+            })
+            .catch(err => console.error('Error cargando config:', err))
+    }, [sucursalId])
+
+    useEffect(() => {
         scrollToBottom()
     }, [messages, stepGroups, isLoading])
+
+    const handleSavePrompt = async () => {
+        setIsSavingPrompt(true)
+        setSaveMessage(null)
+        try {
+            const res = await fetch(`/api/dev/sucursal/${sucursalId}/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ customPrompt: editableCustomPrompt })
+            })
+            if (!res.ok) throw new Error('Error al guardar')
+            setSaveMessage({ type: 'success', text: 'Prompt guardado correctamente ✅' })
+            setIsEditingPrompt(false)
+            setTimeout(() => setSaveMessage(null), 3000)
+        } catch (error: any) {
+            setSaveMessage({ type: 'error', text: 'Fallo al guardar: ' + error.message })
+        } finally {
+            setIsSavingPrompt(false)
+        }
+    }
 
     const handleSend = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -483,6 +519,53 @@ export default function ChatTester() {
                     </div>
                 </header>
                 <div className="flex-1 overflow-y-auto p-4 bg-slate-900/50 scrollbar-hide space-y-6">
+                    {/* Editor Manual */}
+                    <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-4 shadow-lg shadow-amber-500/5">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-xs font-bold text-amber-400 uppercase tracking-widest flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                                Instrucciones Personalizadas
+                            </h3>
+                            <button
+                                onClick={() => setIsEditingPrompt(!isEditingPrompt)}
+                                className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded transition-colors border border-slate-700"
+                            >
+                                {isEditingPrompt ? 'Cancelar' : 'Editar'}
+                            </button>
+                        </div>
+
+                        {isEditingPrompt ? (
+                            <div className="space-y-3">
+                                <textarea
+                                    value={editableCustomPrompt}
+                                    onChange={(e) => setEditableCustomPrompt(e.target.value)}
+                                    className="w-full h-48 bg-slate-950 border border-amber-500/30 rounded-lg p-3 text-[11px] font-mono text-amber-100 focus:outline-none focus:border-amber-500/60 transition-colors scrollbar-hide resize-none leading-relaxed"
+                                    placeholder="Agrega reglas específicas para este negocio..."
+                                />
+                                <div className="flex justify-end gap-2">
+                                    <button
+                                        onClick={handleSavePrompt}
+                                        disabled={isSavingPrompt}
+                                        className="bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 text-white text-[10px] font-bold px-4 py-1.5 rounded-lg transition-all shadow-lg shadow-amber-900/40 flex items-center gap-2"
+                                    >
+                                        {isSavingPrompt ? (
+                                            <>
+                                                <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                Guardando...
+                                            </>
+                                        ) : 'Guardar Cambios'}
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="bg-slate-950/40 rounded-lg p-3 border border-slate-800/50">
+                                <pre className="text-[10px] font-mono text-slate-400 whitespace-pre-wrap italic">
+                                    {editableCustomPrompt || 'Sin instrucciones personalizadas configuradas.'}
+                                </pre>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Identificación Diagnostic */}
                     <div className="bg-slate-900 border border-fuchsia-500/30 rounded-2xl p-4 shadow-lg shadow-fuchsia-500/5">
                         <h3 className="text-xs font-bold text-fuchsia-400 uppercase tracking-widest mb-3 flex items-center gap-2">
@@ -520,30 +603,28 @@ export default function ChatTester() {
                         )}
                     </div>
 
-                    {!persistentPrompt ? (
-                        <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-3">
-                            <svg className="w-12 h-12 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            <p className="text-sm text-center">Envía un mensaje para ver<br/>el prompt del agente</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between px-1">
-                                <div className="text-[10px] font-mono text-slate-500 uppercase">
-                                   Versión Actual en Servidor
-                                </div>
-                                {promptUpdatedAt && (
-                                    <div className="text-[10px] bg-amber-500/10 text-amber-500/80 px-2 py-0.5 rounded border border-amber-500/20 font-mono">
-                                        ACTUALIZADO: {new Date(promptUpdatedAt).toLocaleString()}
-                                    </div>
-                                )}
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between px-1">
+                            <div className="text-[10px] font-mono text-slate-500 uppercase">
+                                Vista Previa del Prompt Final (Sistema)
                             </div>
-                            <pre className="text-[10px] text-amber-200 bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
+                            {(promptUpdatedAt || persistentPrompt) && (
+                                <div className="text-[10px] bg-amber-500/10 text-amber-500/80 px-2 py-0.5 rounded border border-amber-500/20 font-mono">
+                                    {promptUpdatedAt ? `ACTUALIZADO: ${new Date(promptUpdatedAt).toLocaleString()}` : 'GENERADO EN ESTA SESIÓN'}
+                                </div>
+                            )}
+                        </div>
+                        {!persistentPrompt ? (
+                            <div className="bg-slate-900/40 border border-slate-800 rounded-lg p-8 flex flex-col items-center justify-center text-slate-600 gap-2">
+                                <Zap className="w-5 h-5 opacity-20" />
+                                <p className="text-[11px] uppercase tracking-widest font-bold">En espera de interacción...</p>
+                            </div>
+                        ) : (
+                            <pre className="text-[10px] text-amber-200/60 bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">
                                 {persistentPrompt}
                             </pre>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

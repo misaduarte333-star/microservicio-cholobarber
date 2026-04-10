@@ -47,7 +47,10 @@ export class CatalogCacheService {
         const prestadorPlural = CatalogCacheService.pluralize(prestadorLabel)
 
         // 3. Formatear con el vocabulario correcto del negocio
-        let catalogMarkdown = `═══════════════════════════════════════════\nCATÁLOGO DEL NEGOCIO (PRE-CARGADO)\n═══════════════════════════════════════════\n`
+        let catalogMarkdown = `===========================================
+CATÁLOGO DEL NEGOCIO (PRE-CARGADO)
+===========================================
+`
         
         catalogMarkdown += `[SERVICIOS DISPONIBLES]\n`
         if (servicios.length > 0) {

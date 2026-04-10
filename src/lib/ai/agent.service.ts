@@ -146,11 +146,23 @@ export class AgentService {
             })
 
             // 7. Extraer la última respuesta y los pasos del agente
-            const lastMessage = result.messages[result.messages.length - 1]
-            const raw = lastMessage.content
-            const outputText: string = (Array.isArray(raw)
-                ? raw.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('')
-                : String(raw)).trim()
+            // Priorizamos el último mensaje de la IA que NO sea una llamada a herramientas
+            const aiMessages = result.messages.filter((m: any) => m._getType?.() === 'ai')
+            const lastAIMessage = aiMessages[aiMessages.length - 1]
+            
+            let outputText = ''
+            if (lastAIMessage) {
+                const raw = lastAIMessage.content
+                outputText = (Array.isArray(raw)
+                    ? raw.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('')
+                    : String(raw)).trim()
+                
+                // Si el último mensaje tiene tool_calls, el LLM se detuvo antes de dar la respuesta final.
+                // Intentamos buscar un mensaje anterior que sí tenga texto, o avisamos del error.
+                if ((lastAIMessage as any).tool_calls?.length > 0) {
+                   outputText = "Disculpa, me quedé a medias procesando tu solicitud. ¿Podrías repetirme qué necesitas?"
+                }
+            }
 
             // 7b. Recopilar pasos del agente para el panel de debug
             const steps: AgentStep[] = []
@@ -172,7 +184,7 @@ export class AgentService {
                                 timestamp: Date.now()
                             })
                         }
-                    } else if (msg === lastMessage) {
+                    } else if (msg === lastAIMessage) {
                         steps.push({
                             type: 'response',
                             output: outputText,

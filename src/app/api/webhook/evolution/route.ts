@@ -67,7 +67,7 @@ export async function POST(req: Request) {
             .from('sucursales')
             .select('*')
             .eq('evolution_instance', instanceName)
-            .eq('agent_active', true)
+            .eq('agent_enabled', true)
             .single()
 
         if (branchError || !sucursal) {
