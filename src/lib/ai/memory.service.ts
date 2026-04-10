@@ -55,11 +55,13 @@ class FreshContextHistory extends BaseChatMessageHistory {
         })
         const now = formatter.format(new Date())
 
+        const currentDate = new Date().toLocaleDateString('en-CA', { timeZone: this.timezone })
         const staleWarning = new HumanMessage(
-            `[SISTEMA ${now}] Nuevo turno iniciado. ` +
-            `REGLA DE CIERRE: Si el historial muestra que el cliente ya confirmó ("sí", "listo", "agenda"), ` +
-            `debes obtener el cliente_id con BUSCAR_CLIENTE y EJECUTAR AGENDAR_CITA en este turno. ` +
-            `No respondas con texto de "éxito" si no llamas a la herramienta técnica correspondinte.`
+            `[SISTEMA — CONTEXTO CRONOLÓGICO] Nuevo turno iniciado el día ${currentDate}. ` +
+            `REGLA DE ORO: Los mensajes debajo de este aviso pueden ser de días pasados. ` +
+            `NUNCA asumas que una cita mencionada en el historial todavía existe o está vigente. ` +
+            `Antes de confirmar cualquier dato al cliente, DEBES usar las herramientas (MIS_CITAS, VALIDAR_HORA) ` +
+            `para obtener la verdad absoluta de la base de datos en tiempo real.`
         )
 
         return [staleWarning, ...limited]
