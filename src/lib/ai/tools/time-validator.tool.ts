@@ -5,7 +5,7 @@ export interface TimeValidatorInput {
 
 export interface TimeValidatorOutput {
     status: 'VALIDA' | 'RECHAZADA'
-    motivo: 'ok' | 'pasada' | 'menos_15' | 'justo'
+    motivo: 'ok' | 'pasada' | 'menos_15' | 'justo' | 'fuera_de_horario'
     advertencia: boolean
     ajustada: boolean
     hora_solicitada_24h: string
@@ -35,41 +35,74 @@ export class TimeValidator {
         // Detectar si hubo ajuste (si la hora original parsed no era :00 o :30)
         const ajustada = (p.m !== 0 && p.m !== 30)
 
-        console.log('[TimeValidator] parsed:', { h: p.h, m: p.m }, 'rounded:', { hF, mF }, 'actualMin:', actualMin, 'solicitadaMin:', hF * 60 + mF)
-
         const solicitadaMin = hF * 60 + mF
         
-        const esHoraValidaParaHoy = this.esHoraValidaEnHorario(hF, mF, actualMin)
+        console.log('[TimeValidator] parsed:', { h: p.h, m: p.m }, 'rounded:', { hF, mF }, 'actualMin:', actualMin, 'solicitadaMin:', solicitadaMin)
 
         let status: 'VALIDA' | 'RECHAZADA' = 'VALIDA'
-        let motivo: 'ok' | 'pasada' | 'menos_15' | 'justo' = 'ok'
+        let motivo: 'ok' | 'pasada' | 'menos_15' | 'justo' | 'fuera_de_horario' = 'ok'
         let advertencia = false
         let siguiente: string | null = null
+        let sugerencia_fecha: 'hoy' | 'mañana' = 'hoy'
 
-        if (!esHoraValidaParaHoy) {
+        // 1. Verificar si la hora ya pasó hoy
+        if (solicitadaMin < actualMin) {
             status = 'RECHAZADA'
             motivo = 'pasada'
-        } else if (solicitadaMin - actualMin < 15) {
+        } 
+        // 2. Verificar si está fuera de horario comercial
+        else if (hF < this.HORA_APERTURA || hF >= this.HORA_CIERRE) {
+            status = 'RECHAZADA'
+            motivo = 'fuera_de_horario'
+        }
+        // 3. Regla de "faltan menos de 15 minutos" para hoy
+        else if (solicitadaMin - actualMin < 15) {
             status = 'RECHAZADA'
             motivo = 'menos_15'
-        } else if (solicitadaMin - actualMin <= 30) {
+        } 
+        // 4. Advertencia si faltan menos de 30 minutos
+        else if (solicitadaMin - actualMin <= 30) {
             advertencia = true
             motivo = 'justo'
         }
 
+        // Si es rechazada o advertencia, buscar sugerencia
         if (status === 'RECHAZADA' || motivo === 'justo') {
-            let tempH = hF
-            let tempM = mF
-            for (let i = 0; i < 48; i++) {
-                const next = this.siguienteBloque(tempH, tempM)
-                const nextMin = next.h * 60 + next.m
-                const d = nextMin - actualMin
-                if (d >= 15) {
-                    siguiente = this.formatHora24(next.h, next.m)
-                    break
+            // Caso especial: si es fuera de horario por ser tarde (> HORA_CIERRE)
+            // o si ya pasó y no hay más bloques hoy, sugerir mañana a la apertura.
+            if (hF >= this.HORA_CIERRE || (motivo === 'pasada' && hF >= this.HORA_CIERRE)) {
+                sugerencia_fecha = 'mañana'
+                siguiente = this.formatHora24(this.HORA_APERTURA, 0)
+            } else {
+                // Buscar siguiente bloque válido HOY
+                let tempH = hF
+                let tempM = mF
+                let found = false
+                for (let i = 0; i < 48; i++) {
+                    const next = this.siguienteBloque(tempH, tempM)
+                    const nextMin = next.h * 60 + next.m
+                    
+                    // Si el siguiente bloque excede el cierre, saltar a mañana
+                    if (next.h >= this.HORA_CIERRE) {
+                        sugerencia_fecha = 'mañana'
+                        siguiente = this.formatHora24(this.HORA_APERTURA, 0)
+                        found = true
+                        break
+                    }
+
+                    if (nextMin - actualMin >= 15) {
+                        siguiente = this.formatHora24(next.h, next.m)
+                        found = true
+                        break
+                    }
+                    tempH = next.h
+                    tempM = next.m
                 }
-                tempH = next.h
-                tempM = next.m
+                
+                if (!found) {
+                    sugerencia_fecha = 'mañana'
+                    siguiente = this.formatHora24(this.HORA_APERTURA, 0)
+                }
             }
         }
 
@@ -79,7 +112,7 @@ export class TimeValidator {
             advertencia,
             ajustada,
             hora_solicitada_24h: this.formatHora24(hF, mF),
-            sugerencia_fecha: status === 'VALIDA' ? 'hoy' : 'mañana',
+            sugerencia_fecha,
             siguiente_bloque: siguiente,
             siguiente_bloque_12h: siguiente
                 ? this.formatHora12(parseInt(siguiente.split(':')[0]), parseInt(siguiente.split(':')[1]))
