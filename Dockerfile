@@ -19,6 +19,12 @@ COPY . .
 # Forzamos un límite bajo de RAM a Node (Max 1.5GB) para evitar un OOM Kill
 ENV NODE_OPTIONS="--max-old-space-size=1536"
 
+# Dummy ENVs estrictamente necesarios para que Next.js no tire error en "Collecting page data".
+# NO SE USAN LLAVES REALES AQUÍ POR SEGURIDAD. Easypanel inyectará las reales en el contenedor al correr.
+ENV NEXT_PUBLIC_SUPABASE_URL="https://dummy.supabase.co"
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY="dummy-anon-key-para-que-compile"
+ENV SUPABASE_SERVICE_ROLE_KEY="dummy-service-key-para-que-compile"
+
 # Next.js requiere algunas variables durante el build, pero en un CI deberíamos pasarlas
 # mediante Build Args. En Easypanel puedes mapearlas; por ahora Next fallback a .env local si no lo pasas
 RUN npm run build
