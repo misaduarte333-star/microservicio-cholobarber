@@ -57,10 +57,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 4. Evolution API Check & Sync
-    const startEvo = performance.now()
     try {
-        // Detectar URL pública real del microservicio desde cabeceras del proxy (Traefik/Nginx en EasyPanel)
-        // Esto evita que Next.js herede la URL interna del contenedor (0.0.0.0 / localhost)
         const headersList = await headers()
         const forwardedHost = headersList.get('x-forwarded-host')
         const forwardedProto = headersList.get('x-forwarded-proto') || 'https'
@@ -68,18 +65,21 @@ export async function GET(req: NextRequest) {
             || process.env.APP_URL
             || (forwardedHost ? `${forwardedProto}://${forwardedHost}` : req.url)
 
-        console.log(`[Health] Sincronizando webhook con URL base: ${appUrlForSync}`)
+        // Sincronizar webhook primero (esto consume tiempo de Supabase/Red)
         const syncRes = await EvolutionService.syncWebhook(appUrlForSync)
         results.evolution.synced = syncRes.success
         results.evolution.message = syncRes.message
 
+        // Obtener configuración para el ping individual
         const supabase = createClient()
-        const { data } = await supabase.from('configuracion_ia_global').select('evolution_api_url, evolution_api_key').eq('id', 1).single()
-        const config = data as any
+        const { data: config } = await supabase.from('configuracion_ia_global').select('evolution_api_url, evolution_api_key').eq('id', 1).single()
+        
         if (config && config.evolution_api_url) {
             const evoUrl = config.evolution_api_url
             const evoKey = config.evolution_api_key
 
+            // --- AQUÍ EMPIEZA LA MEDICIÓN REAL DE EVOLUTION ---
+            const startEvo = performance.now()
             const response = await fetch(`${evoUrl}/instance/fetchInstances`, {
                 method: 'GET',
                 headers: { 'apikey': evoKey },
