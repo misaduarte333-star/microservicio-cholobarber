@@ -149,6 +149,8 @@ export default function ChatTester() {
     const [editableCustomPrompt, setEditableCustomPrompt] = useState<string>('')
     const [isSavingPrompt, setIsSavingPrompt] = useState(false)
     const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false)
+    const [isResetting, setIsResetting] = useState(false)
+    const [isEditingPrompt, setIsEditingPrompt] = useState(false)
     const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
     const messagesEndRef = useRef<HTMLDivElement>(null)
