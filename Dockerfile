@@ -26,9 +26,10 @@ ENV NODE_OPTIONS="--max-old-space-size=1536"
 ENV NEXT_PUBLIC_SUPABASE_URL=https://zzkryfmfoucxxmimrhyh.supabase.co
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6a3J5Zm1mb3VjeHhtaW1yaHloIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDY4MjI4OSwiZXhwIjoyMDg2MjU4Mjg5fQ.sGjaJYWmXfDVRXbFsta0eJ9Y7yW4hKTKuSpGfPASisE
 
-# Esta SÍ es secreta. Se queda vacía en el build para no levantar warnings de seguridad de Docker.
-# Easypanel le inyectará el valor real como variable de entorno al levantar el contenedor.
-ENV SUPABASE_SERVICE_ROLE_KEY=""
+# Esta SÍ es secreta. No tiene el prefijo NEXT_PUBLIC_ así que no se quema en el código JS.
+# Le ponemos un string de mentira para que el SDK de Supabase no crashee con "supabaseKey is required"
+# durante el build. Easypanel la sobreescribirá en producción.
+ENV SUPABASE_SERVICE_ROLE_KEY="dummy-service-key-para-que-compile"
 
 RUN npm run build
 
