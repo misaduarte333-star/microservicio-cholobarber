@@ -16,11 +16,11 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Variables reales quemadas para asegurar que Next.js compile y funcione 100%
-ENV NEXT_PUBLIC_SUPABASE_URL=https://zzkryfmfoucxxmimrhyh.supabase.co
-ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6a3J5Zm1mb3VjeHhtaW1yaHloIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDY4MjI4OSwiZXhwIjoyMDg2MjU4Mjg5fQ.sGjaJYWmXfDVRXbFsta0eJ9Y7yW4hKTKuSpGfPASisE
-ENV SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6a3J5Zm1mb3VjeHhtaW1yaHloIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDY4MjI4OSwiZXhwIjoyMDg2MjU4Mjg5fQ.sGjaJYWmXfDVRXbFsta0eJ9Y7yW4hKTKuSpGfPASisE
+# Forzamos un límite bajo de RAM a Node (Max 1.5GB) para evitar un OOM Kill
+ENV NODE_OPTIONS="--max-old-space-size=1536"
 
+# Next.js requiere algunas variables durante el build, pero en un CI deberíamos pasarlas
+# mediante Build Args. En Easypanel puedes mapearlas; por ahora Next fallback a .env local si no lo pasas
 RUN npm run build
 
 # Production image, copy all the files and run next
