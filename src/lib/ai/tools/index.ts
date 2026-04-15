@@ -10,7 +10,7 @@ import { makeConsultarSucursalTool, makeConsultarBarberosTool, makeConsultarServ
 export function makeAllTools(sucursalId: string, timezone: string = 'America/Hermosillo') {
     return [
         // Validación y disponibilidad (tiempo real)
-        makeValidarHoraTool(timezone),
+        makeValidarHoraTool(sucursalId, timezone),
         makeDisponibilidadHoyTool(sucursalId, timezone),
         makeDisponibilidadOtroDiaTool(sucursalId, timezone),
 

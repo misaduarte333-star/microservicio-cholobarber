@@ -18,11 +18,14 @@ export class TimeValidator {
     static readonly HORA_APERTURA = 9  // 9 AM
     static readonly HORA_CIERRE = 20   // 8 PM
 
-    static validate(input: TimeValidatorInput): TimeValidatorOutput {
+    static validate(input: TimeValidatorInput, config?: { apertura: number, cierre: number }): TimeValidatorOutput {
+        const horaApertura = config?.apertura ?? this.HORA_APERTURA
+        const horaCierre = config?.cierre ?? this.HORA_CIERRE
+
         const horaActualStr = input.hora_actual
         const horaSolicitadaStr = input.hora_solicitada
 
-        console.log('[TimeValidator] validate input:', { horaActualStr, horaSolicitadaStr })
+        console.log('[TimeValidator] validate input:', { horaActualStr, horaSolicitadaStr, config })
         
         const [hAct, mAct] = horaActualStr.split(':').map(Number)
         const actualMin = hAct * 60 + mAct
@@ -51,7 +54,7 @@ export class TimeValidator {
             motivo = 'pasada'
         } 
         // 2. Verificar si está fuera de horario comercial
-        else if (hF < this.HORA_APERTURA || hF >= this.HORA_CIERRE) {
+        else if (hF < horaApertura || hF >= horaCierre) {
             status = 'RECHAZADA'
             motivo = 'fuera_de_horario'
         }
@@ -68,29 +71,40 @@ export class TimeValidator {
 
         // Si es rechazada o advertencia, buscar sugerencia
         if (status === 'RECHAZADA' || motivo === 'justo') {
-            // Caso especial: si es fuera de horario por ser tarde (> HORA_CIERRE)
-            // o si ya pasó y no hay más bloques hoy, sugerir mañana a la apertura.
-            if (hF >= this.HORA_CIERRE || (motivo === 'pasada' && hF >= this.HORA_CIERRE)) {
+            console.log(`[TimeValidator] Finding suggestion for motivo: ${motivo}, hF: ${hF}, cierre: ${horaCierre}`)
+            // Caso especial: si es fuera de horario por ser tarde (>= horaCierre)
+            if (hF >= horaCierre) {
+                console.log(`[TimeValidator] Requested time is after closing. Suggesting tomorrow.`)
                 sugerencia_fecha = 'mañana'
-                siguiente = this.formatHora24(this.HORA_APERTURA, 0)
+                siguiente = this.formatHora24(horaApertura, 0)
+            } else if (hF < horaApertura) {
+                console.log(`[TimeValidator] Requested time is before opening. Suggesting today opening.`)
+                sugerencia_fecha = 'hoy'
+                siguiente = this.formatHora24(horaApertura, 0)
             } else {
                 // Buscar siguiente bloque válido HOY
                 let tempH = hF
                 let tempM = mF
                 let found = false
+                console.log(`[TimeValidator] Searching next block today starting from ${hF}:${mF}`)
+                
                 for (let i = 0; i < 48; i++) {
                     const next = this.siguienteBloque(tempH, tempM)
                     const nextMin = next.h * 60 + next.m
                     
-                    // Si el siguiente bloque excede el cierre, saltar a mañana
-                    if (next.h >= this.HORA_CIERRE) {
+                    console.log(`[TimeValidator] i=${i}, Checking block ${next.h}:${next.m} (nextMin: ${nextMin})`)
+
+                    // Si el siguiente bloque es IGUAL O MAYOR al cierre, ya no hay lugar hoy
+                    if (next.h >= horaCierre) {
+                        console.log(`[TimeValidator] Block ${next.h}:${next.m} reaches closing time (${horaCierre}). Moving to tomorrow.`)
                         sugerencia_fecha = 'mañana'
-                        siguiente = this.formatHora24(this.HORA_APERTURA, 0)
+                        siguiente = this.formatHora24(horaApertura, 0)
                         found = true
                         break
                     }
 
                     if (nextMin - actualMin >= 15) {
+                        console.log(`[TimeValidator] Found valid block today: ${next.h}:${next.m}`)
                         siguiente = this.formatHora24(next.h, next.m)
                         found = true
                         break
@@ -100,13 +114,14 @@ export class TimeValidator {
                 }
                 
                 if (!found) {
+                    console.log(`[TimeValidator] No valid block found today. Suggesting tomorrow.`)
                     sugerencia_fecha = 'mañana'
-                    siguiente = this.formatHora24(this.HORA_APERTURA, 0)
+                    siguiente = this.formatHora24(horaApertura, 0)
                 }
             }
         }
 
-        return {
+        const out: TimeValidatorOutput = {
             status,
             motivo,
             advertencia,
@@ -118,6 +133,9 @@ export class TimeValidator {
                 ? this.formatHora12(parseInt(siguiente.split(':')[0]), parseInt(siguiente.split(':')[1]))
                 : null
         }
+        console.log('[TimeValidator] FINAL OUTPUT:', out)
+        return out
+
     }
 
     static parseHoraPublic(horaStr: string): { h: number; m: number } {

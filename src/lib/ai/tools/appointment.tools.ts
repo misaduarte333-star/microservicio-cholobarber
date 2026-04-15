@@ -143,7 +143,7 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
             'ÚNICA FORMA DE CREAR UNA CITA. Ejecutar SOLO tras confirmar: NOMBRE DEL CLIENTE, barbero, servicio, hora validada y disponibilidad. ' +
             'ESTA HERRAMIENTA ES LA QUE OBLIGA A TENER EL NOMBRE DEL CLIENTE.',
         schema: z.object({
-            barbero_id: z.string().describe('UUID del barbero'),
+            barbero_id: z.string().describe('UUID del profesional seleccionado (Barbero, Manicurista, Estilista, etc.)'),
             servicio_id: z.string().describe('UUID del servicio (Asegúrate de que coincida con el nombre del servicio acordado con el cliente).'),
             cliente_id: z.string().describe('UUID del cliente (obtenido con BUSCAR_CLIENTE)'),
             cliente_nombre: z.string().describe('Nombre del cliente'),

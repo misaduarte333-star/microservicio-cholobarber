@@ -84,7 +84,8 @@ export class AgentService {
             customPrompt: ctx.customPrompt || undefined,
             identifiedClient: clienteRes?.data || undefined,
             businessCatalog: businessCatalogStr,
-            tipoPrestadorLabel: ctx.tipoPrestadorLabel || 'Barbero'
+            tipoPrestadorLabel: ctx.tipoPrestadorLabel || 'Barbero',
+            horarioApertura: sucursalRes?.data?.horario_apertura
         })
 
         // 3. Crear LLM dinámico según el proveedor configurado
@@ -137,13 +138,23 @@ export class AgentService {
                 .replace(/{sender_phone}/g, senderPhone)
 
             // 6. Ejecutar el grafo con el historial previo
+            const messages = [
+                new SystemMessage(finalSystemPrompt),
+                ...previousMessages,
+                new HumanMessage(input),
+            ]
+
+            console.log('\n--- [AgentService] INVOKING AGENT ---')
+            console.log(`Prompt Preview:\n${finalSystemPrompt.substring(0, 500)}...`)
+            console.log(`\nInput: "${input}"`)
+            console.log(`Custom Prompt found: ${ctx.customPrompt ? 'YES' : 'NO'}`)
+            if (ctx.customPrompt) console.log(`Custom Prompt Content:\n${ctx.customPrompt}`)
+
             const result = await agent.invoke({
-                messages: [
-                    new SystemMessage(finalSystemPrompt),
-                    ...previousMessages,
-                    new HumanMessage(input),
-                ],
+                messages: messages,
             })
+
+
 
             // 7. Extraer la última respuesta y los pasos del agente
             // Priorizamos el último mensaje de la IA que NO sea una llamada a herramientas
@@ -176,7 +187,9 @@ export class AgentService {
                     const toolCalls = (msg as any).tool_calls
                     if (toolCalls && toolCalls.length > 0) {
                         for (const tc of toolCalls) {
+                            console.log(`[AgentService] TOOL CALL DETECTED: ${tc.name}`, tc.args)
                             if (tc.id) toolInputs[tc.id] = tc.args
+
                             steps.push({
                                 type: 'tool_call',
                                 name: tc.name,

@@ -10,14 +10,13 @@ import { addMinutes } from 'date-fns'
  * Verifica que la hora esté a 15+ minutos en el futuro (solo aplica para citas de HOY).
  * Para fechas futuras, la hora siempre es válida.
  */
-export const makeValidarHoraTool = (timezone: string = 'America/Hermosillo') => {
+export const makeValidarHoraTool = (sucursalId: string, timezone: string = 'America/Hermosillo') => {
     return new DynamicStructuredTool({
         name: 'VALIDAR_HORA',
         description:
-            'PASO 1 OBLIGATORIO: Llama esta herramienta SIEMPRE que el cliente mencione una hora. ' +
-            'Es la ÚNICA forma de saber si una hora es válida para hoy o si ya pasó. ' +
-            'Entrada: {"hora_solicitada": "10:00", "fecha": "2026-03-31"}. ' +
-            'Si no la llamas, no puedes ofrecer barberos ni confirmar citas.',
+            'HERRAMIENTA OBLIGATORIA (REGLA DE ORO): Llama esta herramienta SIEMPRE que el cliente mencione una hora. ' +
+            'No tienes permitido responder sobre disponibilidad ni sugerir horas sin este resultado técnico. ' +
+            'Entrada: {"hora_solicitada": "10:00", "fecha": "2026-03-31"}. ',
         schema: z.object({
             hora_solicitada: z.string().optional().describe('Hora solicitada (ej: "14:30", "3pm", "15:00")'),
             fecha: z.string().optional().describe('Fecha en formato YYYY-MM-DD (ej: "2026-03-30")'),
@@ -87,7 +86,36 @@ export const makeValidarHoraTool = (timezone: string = 'America/Hermosillo') => 
                 // Debug: log what we're comparing
                 console.log('[VALIDAR_HORA] timezone:', tz, 'hora_actual:', hora_actual, 'hora_solicitada:', hora, 'parsed:', TimeValidator.parseHoraPublic(hora))
                 
-                const result = TimeValidator.validate({ hora_actual, hora_solicitada: hora })
+                // Intentar obtener horario de la sucursal para mayor precisión
+                const supabase = getAISupabaseClient()
+                const { data: sucursalData } = await supabase
+                    .from('sucursales')
+                    .select('horario_apertura')
+                    .eq('id', sucursalId) // sucursalId viene del scope de makeValidarHoraTool
+                    .single()
+
+                let config = undefined
+                if (sucursalData?.horario_apertura) {
+                    const dayName = formatInTimeZone(new Date(), tz, 'eeee').toLowerCase()
+                    const dayMap: any = {
+                        'monday': 'lunes', 'tuesday': 'martes', 'wednesday': 'miercoles',
+                        'thursday': 'jueves', 'friday': 'viernes', 'saturday': 'sabado', 'sunday': 'domingo'
+                    }
+                    const dayKey = dayMap[dayName] || dayName
+                    const hS = sucursalData.horario_apertura[dayKey]
+                    if (hS) {
+                        const inicio = hS.apertura || hS.inicio
+                        const fin = hS.cierre || hS.fin
+                        if (inicio && fin) {
+                            config = {
+                                apertura: parseInt(inicio.split(':')[0]),
+                                cierre: parseInt(fin.split(':')[0])
+                            }
+                        }
+                    }
+                }
+
+                const result = TimeValidator.validate({ hora_actual, hora_solicitada: hora }, config)
                 console.log('[VALIDAR_HORA] result:', result)
                 return JSON.stringify(result)
             } catch (error: any) {
@@ -290,7 +318,7 @@ export const makeDisponibilidadHoyTool = (sucursalId: string, timezone: string =
     makeDisponibilidadBase(
         sucursalId,
         'DISPONIBILIDAD_HOY',
-        'Usa cuando la fecha es HOY. Devuelve barberos disponibles/ocupados para un slot de tiempo.',
+        'Usa cuando la fecha es HOY. Devuelve profesionales disponibles/ocupados para un slot de tiempo.',
         timezone
     )
 
@@ -298,6 +326,6 @@ export const makeDisponibilidadOtroDiaTool = (sucursalId: string, timezone: stri
     makeDisponibilidadBase(
         sucursalId,
         'DISPONIBILIDAD_OTRO_DIA',
-        'Usa cuando la fecha NO es hoy. Devuelve barberos disponibles/ocupados para un slot de tiempo.',
+        'Usa cuando la fecha NO es hoy. Devuelve profesionales disponibles/ocupados para un slot de tiempo.',
         timezone
     )

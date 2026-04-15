@@ -148,7 +148,7 @@ export default function ChatTester() {
     const [promptUpdatedAt, setPromptUpdatedAt] = useState<string | null>(null)
     const [editableCustomPrompt, setEditableCustomPrompt] = useState<string>('')
     const [isSavingPrompt, setIsSavingPrompt] = useState(false)
-    const [isEditingPrompt, setIsEditingPrompt] = useState(false)
+    const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false)
     const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
     const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -277,6 +277,51 @@ export default function ChatTester() {
 
 
 
+    const handleRefreshCatalog = async () => {
+        setIsRefreshingCatalog(true)
+        try {
+            const res = await fetch('/api/dev/cache/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sucursalId })
+            })
+            
+            if (!res.ok) throw new Error('Error al refrescar catálogo')
+            
+            setSaveMessage({ type: 'success', text: 'Caché de catálogo limpiada correctamente ✅' })
+            setTimeout(() => setSaveMessage(null), 3000)
+        } catch (error: any) {
+            setSaveMessage({ type: 'error', text: 'Error: ' + error.message })
+        } finally {
+            setIsRefreshingCatalog(false)
+        }
+    }
+
+    const handleResetMemory = async () => {
+        if (!confirm('¿Deseas reiniciar el contexto del agente? Esto borrará su memoria de esta conversación.')) return
+        
+        setIsResetting(true)
+        try {
+            const res = await fetch('/api/dev/chat/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sucursalId, phone })
+            })
+            
+            if (!res.ok) throw new Error('Error al borrar memoria del servidor')
+            
+            setMessages([{ id: '1', role: 'system', text: 'Memoria del agente reiniciada. Nueva conversación iniciada.', time: new Date() }])
+            setStepGroups([])
+            setPersistentPrompt(null)
+            setSaveMessage({ type: 'success', text: 'Memoria del agente reiniciada correctamente ✅' })
+            setTimeout(() => setSaveMessage(null), 3000)
+        } catch (error: any) {
+            setSaveMessage({ type: 'error', text: 'Fallo al resetear: ' + error.message })
+        } finally {
+            setIsResetting(false)
+        }
+    }
+
     const totalToolCalls = stepGroups.reduce((acc, g) => acc + g.steps.filter(s => s.type === 'tool_call').length, 0)
     const totalErrors = stepGroups.reduce((acc, g) => acc + g.steps.filter(s => s.hasError || hasErrorInOutput(s.output)).length, 0)
 
@@ -312,17 +357,37 @@ export default function ChatTester() {
                     </div>
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={() => {
-                                setMessages([{ id: '1', role: 'system', text: 'Historial limpiado. Sesión reiniciada.', time: new Date() }])
-                                setStepGroups([])
-                                setPersistentPrompt(null)
-                            }}
-                            className="p-2 hover:bg-slate-700 rounded-full transition-colors text-slate-400 hover:text-white"
-                            title="Limpiar chat local"
+                            onClick={handleRefreshCatalog}
+                            disabled={isRefreshingCatalog || isLoading}
+                            className={`p-2 rounded-full transition-colors flex items-center justify-center ${
+                                isRefreshingCatalog ? 'bg-cyan-500/20 text-cyan-400' : 'hover:bg-slate-700 text-slate-400 hover:text-white'
+                            }`}
+                            title="Refrescar Catálogo (Limpiar Caché)"
                         >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
+                            {isRefreshingCatalog ? (
+                                <div className="w-5 h-5 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
+                            ) : (
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            )}
+                        </button>
+
+                        <button
+                            onClick={handleResetMemory}
+                            disabled={isResetting || isLoading}
+                            className={`p-2 rounded-full transition-colors flex items-center justify-center ${
+                                isResetting ? 'bg-red-500/20 text-red-400' : 'hover:bg-slate-700 text-slate-400 hover:text-white'
+                            }`}
+                            title="Reiniciar Memoria (Hard Reset)"
+                        >
+                            {isResetting ? (
+                                <div className="w-5 h-5 border-2 border-red-400/30 border-t-red-400 rounded-full animate-spin" />
+                            ) : (
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            )}
                         </button>
                     </div>
                 </header>
