@@ -36,6 +36,34 @@ export class DebouncerService {
     private readonly DEBOUNCE_TIME_MS = 3000 // 3 seconds configured as per user setup
     private readonly UNSENT_KEY_PREFIX = 'unsent:'
     private readonly MANUAL_MODE_PREFIX = 'manual_mode:'
+    private readonly TEST_BRANCH_PREFIX = 'test_branch_selection:'
+
+    /**
+     * Obtiene el negocio seleccionado para pruebas en una instancia genérica.
+     */
+    public async getTestBranch(phone: string): Promise<string | null> {
+        if (redis.status !== 'ready') return null
+        try {
+            return await redis.get(`${this.TEST_BRANCH_PREFIX}${phone}`)
+        } catch {
+            return null
+        }
+    }
+
+    /**
+     * Establece el negocio para pruebas.
+     */
+    public async setTestBranch(phone: string, sucursalId: string | null): Promise<void> {
+        if (redis.status !== 'ready') return
+        try {
+            const key = `${this.TEST_BRANCH_PREFIX}${phone}`
+            if (sucursalId) {
+                await redis.set(key, sucursalId, 'EX', 86400) // 24h
+            } else {
+                await redis.del(key)
+            }
+        } catch {}
+    }
 
     /**
      * Revisa si un chat específico está en modo manual (agente pausado).

@@ -2,12 +2,15 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { AgentService } from '@/lib/ai/agent.service'
 import { debouncerService } from '@/lib/ai/debouncer.service'
+import { EvolutionService } from '@/lib/evolution.service'
 
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+const CHOLO_BARBER_ID = 'f07a7640-9d86-499f-a048-24109345787a'
 
 /**
  * Route handler for the Evolution API Webhook.
@@ -66,16 +69,59 @@ export async function POST(req: Request) {
         const cleanMessageText = messageText.toLowerCase().trim()
 
         // 3. Buscar la configuración en Supabase
-        // Primero, la Branch
-        const { data: sucursal, error: branchError } = await supabase
-            .from('sucursales')
-            .select('*')
-            .eq('evolution_instance', instanceName)
-            .eq('agent_enabled', true)
-            .single()
+        let sucursal: any = null
 
-        if (branchError || !sucursal) {
-            console.warn(`[Webhook] Instancia ${instanceName} no configurada o agente inactivo en tabla sucursales.`)
+        // --- LÓGICA DE RUTEO POR INSTANCIA ---
+        if (instanceName === 'cholobarber') {
+            // Instancia EXCLUSIVA de producción: Cholo Barber
+            const { data } = await supabase.from('sucursales').select('*').eq('id', CHOLO_BARBER_ID).single()
+            sucursal = data
+        } 
+        else if (instanceName === 'barberia') {
+            // Instancia de PRUEBAS multi-negocio
+            if (cleanMessageText === 'reiniciar pruebas' || cleanMessageText === '/reset') {
+                await debouncerService.setTestBranch(senderPhone, null)
+                await EvolutionService.sendTextMessage(process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, '🔄 Sesión de pruebas reiniciada. Envía cualquier mensaje para elegir negocio.')
+                return NextResponse.json({ received: true, action: 'test_reset' })
+            }
+
+            const selectedId = await debouncerService.getTestBranch(senderPhone)
+            if (selectedId) {
+                const { data } = await supabase.from('sucursales').select('*').eq('id', selectedId).single()
+                sucursal = data
+            }
+
+            if (!sucursal) {
+                // No hay selección o el ID ya no es válido -> Listar negocios
+                const { data: sucursales } = await supabase.from('sucursales').select('id, nombre').eq('agent_enabled', true)
+                
+                // Verificar si el mensaje del usuario coincide con algún nombre de negocio
+                const match = sucursales?.find(s => cleanMessageText.includes(s.nombre.toLowerCase()))
+                if (match) {
+                    await debouncerService.setTestBranch(senderPhone, match.id)
+                    const { data } = await supabase.from('sucursales').select('*').eq('id', match.id).single()
+                    sucursal = data
+                    await EvolutionService.sendTextMessage(process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, `✅ Entrando en modo de pruebas para: *${match.nombre}*.\n\nEscribe "Reiniciar pruebas" para cambiar.`)
+                } else {
+                    const list = sucursales?.map((s, i) => `${i + 1}. *${s.nombre}*`).join('\n') || 'No hay negocios configurados.'
+                    await EvolutionService.sendTextMessage(process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, `🧪 *MODO DE PRUEBAS*\n\n¿Qué negocio quieres probar hoy?\n\n${list}\n\nEscribe el nombre del negocio para comenzar.`)
+                    return NextResponse.json({ received: true, action: 'test_routing_prompt' })
+                }
+            }
+        } 
+        else {
+            // Instancia estándar: buscar por mapeo en DB
+            const { data } = await supabase
+                .from('sucursales')
+                .select('*')
+                .eq('evolution_instance', instanceName)
+                .eq('agent_enabled', true)
+                .single()
+            sucursal = data
+        }
+
+        if (!sucursal) {
+            console.warn(`[Webhook] Instancia ${instanceName} no configurada o agente inactivo para sesión ${senderPhone}.`)
             return NextResponse.json({ received: true })
         }
 
