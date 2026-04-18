@@ -119,6 +119,12 @@ export class EvolutionService {
             }
 
             return true
+        } catch (error: any) {
+            console.error(`[EvolutionService] Error catastrófico enviando mensaje a ${phone}:`, error.message)
+            return false
+        }
+    }
+
     /**
      * Envía un estado de presencia (escribiendo, grabando, etc) a través de Evolution API.
      */
