@@ -216,9 +216,11 @@ export class DebouncerService {
             }
 
         } catch (error: any) {
-            console.error('[Debouncer] AI Error:', error.message)
+            console.error('[Debouncer] AI CRITICAL ERROR:', error)
+            const errorMsg = error.message || 'Error desconocido'
             if (evoEndpoint) {
-                await this.sendEvolutionMessage(evoEndpoint, evoToken, remoteJid, 'Ups, tuve un problema interno de conexión. Dame unos minutos.')
+                // Durante diagnóstico, enviamos un mensaje un poco más detallado si es posible o al menos el error en el log
+                await this.sendEvolutionMessage(evoEndpoint, evoToken, remoteJid, `⚠️ Error de conexión con la IA: ${errorMsg.substring(0, 100)}. Por favor, contacta a soporte.`)
             }
         }
     }

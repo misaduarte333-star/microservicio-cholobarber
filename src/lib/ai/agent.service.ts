@@ -89,6 +89,8 @@ export class AgentService {
             tipoPrestadorLabel: ctx.tipoPrestadorLabel || 'Barbero',
             horarioApertura: sucursalRes?.data?.horario_apertura
         })
+        console.log(`[AgentService] Context loaded. Provider: ${ctx.aiProvider} | Model: ${ctx.aiModel}`)
+        console.log(`[AgentService] System Prompt Length: ${systemPromptStr.length} chars`)
 
         // 3. Crear LLM dinámico según el proveedor configurado
         let llm: any
