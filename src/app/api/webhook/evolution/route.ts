@@ -107,6 +107,8 @@ export async function POST(req: Request) {
                     await EvolutionService.sendTextMessage(process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, `✅ Entrando en modo de pruebas para: *${match.nombre}*.\n\nEscribe "Reiniciar pruebas" para cambiar.`)
                 } else {
                     const list = sucursales?.map((s, i) => `${i + 1}. *${s.nombre}*`).join('\n') || 'No hay negocios configurados.'
+                    // Mostrar escribiendo antes del prompt de selección
+                    await EvolutionService.sendPresence(process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, 'composing')
                     await EvolutionService.sendTextMessage(process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, `🧪 *MODO DE PRUEBAS*\n\n¿Qué negocio quieres probar hoy?\n\n${list}\n\nEscribe el nombre del negocio para comenzar.`)
                     return NextResponse.json({ received: true, action: 'test_routing_prompt' })
                 }
@@ -210,7 +212,7 @@ export async function POST(req: Request) {
                 anthropicKey,
                 groqKey,
                 // Passing auth variables so the Debouncer can reply async
-                ...( { evoToken, evoEndpoint } as any)
+                ...( { evoToken, evoEndpoint, apiBase, instanceName } as any)
             }
         })
 

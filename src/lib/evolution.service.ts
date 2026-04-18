@@ -119,8 +119,28 @@ export class EvolutionService {
             }
 
             return true
+    /**
+     * Envía un estado de presencia (escribiendo, grabando, etc) a través de Evolution API.
+     */
+    public static async sendPresence(baseUrl: string, apikey: string, instance: string, phone: string, value: 'composing' | 'recording' | 'paused'): Promise<boolean> {
+        try {
+            const evoBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+            // El endpoint oficial para presencia es chat/updatePresence
+            const res = await fetch(`${evoBaseUrl}chat/updatePresence/${instance}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    apikey
+                },
+                body: JSON.stringify({
+                    number: phone,
+                    presence: value
+                })
+            })
+
+            return res.ok
         } catch (error: any) {
-            console.error(`[EvolutionService] Error catastrófico enviando mensaje a ${phone}:`, error.message)
+            console.error(`[EvolutionService] Error enviando presencia a ${phone}:`, error.message)
             return false
         }
     }

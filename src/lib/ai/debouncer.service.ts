@@ -185,8 +185,10 @@ export class DebouncerService {
 
         try {
             // Mostrar estado "Escribiendo..."
-            if (evoEndpoint) {
-                await this.sendEvolutionPresence(evoEndpoint.replace('sendText', 'presence'), evoToken, remoteJid, 'composing')
+            if (evoToken && (ctx as any).apiBase) {
+                const apiBase = (ctx as any).apiBase
+                const instanceName = (ctx as any).instanceName || evoEndpoint.split('/').pop()
+                await EvolutionService.sendPresence(apiBase, evoToken, instanceName, remoteJid, 'composing')
             }
 
             // Llamar al LLM!
@@ -241,27 +243,6 @@ export class DebouncerService {
         } catch (error: any) {
             console.error(`[Evolution Net Error] Catch exception sending to Evolution: ${error.message}`);
             return false;
-        }
-    }
-
-    private async sendEvolutionPresence(endpoint: string, token: string, jid: string, presence: string): Promise<boolean> {
-        try {
-            const res = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'apikey': token },
-                body: JSON.stringify({
-                    number: jid,
-                    presence,
-                    delay: 5000
-                })
-            });
-            if (!res.ok) {
-                console.error(`[Evolution API Error] sendPresence failed: ${res.status}`);
-            }
-            return res.ok;
-        } catch (err: any) { 
-            console.error(`[Evolution Net Error] sendPresence exception: ${err.message}`);
-            return false; 
         }
     }
 }
