@@ -23,11 +23,13 @@ const CHOLO_BARBER_ID = 'f07a7640-9d86-499f-a048-24109345787a'
  * 5. Send message back to Evolution API.
  */
 export async function POST(req: Request) {
-    try {
+        console.info(`[Webhook] Incoming request: ${req.method} ${req.url}`)
         const payload = await req.json()
+        console.dir(payload, { depth: null })
 
         // Si Evolution nos manda validaciones o payloads incompletos, ignoramos
         if (!payload || !payload.data || !payload.data.key) {
+            console.warn('[Webhook] Incomplete payload received.')
             return NextResponse.json({ received: true })
         }
 
@@ -41,7 +43,7 @@ export async function POST(req: Request) {
         // 2. Extraer datos del mensaje
         const remoteJid = payload.data.key.remoteJid
         if (!remoteJid || remoteJid.includes('@g.us')) {
-            // Ignorar grupos
+            console.info(`[Webhook] Ignoring group message from ${remoteJid}`)
             return NextResponse.json({ received: true })
         }
 
@@ -169,6 +171,9 @@ export async function POST(req: Request) {
         const apiBase = configIa.evolution_api_url.endsWith('/') ? configIa.evolution_api_url : `${configIa.evolution_api_url}/`
         const evoToken = sucursal.evolution_key || configIa.evolution_api_key
         const evoEndpoint = `${apiBase}message/sendText/${instanceName}`
+
+        console.info(`[Webhook] Processing session ${sessionId}`)
+        console.info(`[Webhook] Using Token: ${evoToken?.substring(0, 5)}... | Endpoint: ${evoEndpoint}`)
 
         const provider = sucursal.llm_provider || configIa.default_provider || 'openai'
         let aiModel = configIa.openai_model || 'gpt-4o-mini' // default fallback
