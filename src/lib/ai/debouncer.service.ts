@@ -1,5 +1,6 @@
 import Redis from 'ioredis'
 import { AgentService, AgentContext } from './agent.service'
+import { EvolutionService } from '../evolution.service'
 
 const globalForRedis = globalThis as unknown as {
     redis: Redis | undefined
@@ -90,6 +91,12 @@ export class DebouncerService {
             if (enabled) {
                 // Modo manual activo por 24 horas
                 await redis.set(key, 'true', 'EX', 86400)
+                // Limpiar buffer inmediatamente si el barbero interviene
+                const listKey = `buffer:${sucursalId}:${phone}`
+                const timerKey = `timer:${sucursalId}:${phone}`
+                await redis.del(listKey)
+                await redis.del(timerKey)
+                console.info(`[Debouncer] Buffer LIMPIADO para ${phone} por intervención manual.`)
             } else {
                 await redis.del(key)
             }
@@ -156,7 +163,18 @@ export class DebouncerService {
         const evoToken = (ctx as any).evoToken
         const evoEndpoint = (ctx as any).evoEndpoint
 
-        // 1. Re-enviar mensajes si hubo una falla en el turno anterior (Solo Redis soporta persistencia real aquí)
+        // 0. VALIDAR MODO MANUAL (Re-chequeo justo antes de procesar)
+        const isManual = await this.getManualMode(ctx.sucursalId, phone)
+        if (isManual) {
+            console.info(`[Debouncer] Agente pausado para ${phone}. Cancelando procesamiento de IA.`)
+            if (redis.status === 'ready') {
+                await redis.del(listKey)
+                await redis.del(timerKey)
+            }
+            return
+        }
+
+        // 1. Re-enviar mensajes si hubo una falla en el turno anterior
         if (redis.status === 'ready') {
             try {
                 const unsentRaw = await redis.get(unsentKey)
