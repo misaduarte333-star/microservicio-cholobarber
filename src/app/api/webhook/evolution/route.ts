@@ -58,8 +58,12 @@ export async function POST(req: Request) {
 
         // Si no hay texto (ej. fotos, audios no transcribibles) lo ignoramos por ahora
         if (!messageText || messageText.trim().length === 0) {
-            return NextResponse.json({ received: true })
+            // Pero si es un mensaje de salida (del barbero) sin texto, igual queremos pausar
+            if (!payload.data.key.fromMe) return NextResponse.json({ received: true })
         }
+
+        const isFromMe = !!payload.data.key.fromMe
+        const cleanMessageText = messageText.toLowerCase().trim()
 
         // 3. Buscar la configuración en Supabase
         // Primero, la Branch
@@ -74,6 +78,30 @@ export async function POST(req: Request) {
             console.warn(`[Webhook] Instancia ${instanceName} no configurada o agente inactivo en tabla sucursales.`)
             return NextResponse.json({ received: true })
         }
+
+        // --- LÓGICA DE MODO MANUAL / INTERVENCIÓN ---
+        // 1. Si el mensaje lo envió el barbero (fromMe), activar modo manual
+        if (isFromMe) {
+            console.info(`[Webhook] Intervención detectada en ${instanceName}. Pausando agente para ${senderPhone}.`)
+            await debouncerService.setManualMode(sucursal.id, senderPhone, true)
+            return NextResponse.json({ received: true, mode: 'manual_activated' })
+        }
+
+        // 2. Si el cliente quiere reactivar el bot (o el barbero envía el comando)
+        if (cleanMessageText === 'activar agente' || cleanMessageText === 'reactivar bot' || cleanMessageText === '/activar') {
+            console.info(`[Webhook] Reactivando agente para ${senderPhone}.`)
+            await debouncerService.setManualMode(sucursal.id, senderPhone, false)
+            // Opcional: Podríamos enviar un mensaje de confirmación aquí, pero por ahora solo reactivamos
+            // para que el siguiente mensaje ya sea procesado.
+        }
+
+        // 3. Verificar si estamos en modo manual
+        const isManual = await debouncerService.getManualMode(sucursal.id, senderPhone)
+        if (isManual) {
+            console.info(`[Webhook] Agente pausado para ${senderPhone}. Ignorando mensaje.`)
+            return NextResponse.json({ received: true, ignored: 'manual_mode_active' })
+        }
+        // --- FIN LÓGICA MODO MANUAL ---
 
         // Segundo, la Configuración Global
         const { data: configIa, error: globalError } = await supabase

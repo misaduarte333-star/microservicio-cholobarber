@@ -9,6 +9,8 @@ import { getAISupabaseClient } from './tools/business.tools'
 import { MemoryService } from './memory.service'
 import { MetricsService } from './metrics.service'
 import { CatalogCacheService } from './catalog-cache.service'
+import { validateInputTriggers } from './input-validator.service'
+import { enforceToolCompliance, validateFinalResponse } from './tool-enforcement.service'
 
 export interface AgentContext {
     sucursalId: string
@@ -117,6 +119,19 @@ export class AgentService {
         const chatHistory = await MemoryService.getChatHistory(sessionId, ctx.timezone)
         const previousMessages = await chatHistory.getMessages()
 
+        // 4.5 VALIDAR TRIGGERS DE INPUT (Detectar qué tools se necesitan)
+        const inputValidation = validateInputTriggers(input)
+        console.log(`\n[INPUT VALIDATION] Triggers detected:`, inputValidation.detectedTriggers)
+        console.log(`[INPUT VALIDATION] Requires:`, {
+            timeValidation: inputValidation.requiresTimeValidation,
+            availabilityCheck: inputValidation.requiresAvailabilityCheck,
+            barberList: inputValidation.requiresBarberList,
+            clientLookup: inputValidation.requiresClientLookup
+        })
+        if (inputValidation.instruction) {
+            console.log(`[INPUT VALIDATION] Instruction for agent:`, inputValidation.instruction)
+        }
+
         // 5. Armar el agente reactivo con LangGraph
         const agent = createReactAgent({
             llm,
@@ -154,7 +169,42 @@ export class AgentService {
                 messages: messages,
             })
 
-
+            // 6.5 VALIDAR COMPLIANCE DE TOOLS (Enforcement) - MODO ESTRICTO
+            const toolsUsed = new Set<string>()
+            for (const msg of result.messages) {
+                if (msg._getType?.() === 'ai') {
+                    const toolCalls = (msg as any).tool_calls
+                    if (toolCalls && toolCalls.length > 0) {
+                        for (const tc of toolCalls) {
+                            toolsUsed.add(tc.name)
+                        }
+                    }
+                }
+            }
+            
+            const enforcementCheck = enforceToolCompliance(result, {
+                userInput: input,
+                triggerValidation: inputValidation,
+                maxRetries: 2
+            }, 1)
+            
+            let hasComplianceViolation = false
+            if (!enforcementCheck.compliant) {
+                console.warn(`[TOOL ENFORCEMENT] ⚠️ VIOLATION: Missing tools:`, enforcementCheck.missingTools)
+                
+                // Detectar si es una violación CRÍTICA
+                const criticalMissing = enforcementCheck.missingTools.filter(tool => 
+                    // Herramientas críticas que NUNCA deben faltar si hay triggers
+                    (tool === 'DISPONIBILIDAD_HOY' && (inputValidation.requiresAvailabilityCheck || inputValidation.detectedTriggers.includes('USER_CONFIRMATION'))) ||
+                    (tool === 'VALIDAR_HORA' && inputValidation.requiresTimeValidation)
+                )
+                
+                if (criticalMissing.length > 0) {
+                    hasComplianceViolation = true
+                    console.error(`[TOOL ENFORCEMENT] 🚨 CRITICAL VIOLATION: Faltaron tools críticas:`, criticalMissing)
+                    console.error(`[TOOL ENFORCEMENT] Triggers detectados:`, inputValidation.detectedTriggers)
+                }
+            }
 
             // 7. Extraer la última respuesta y los pasos del agente
             // Priorizamos el último mensaje de la IA que NO sea una llamada a herramientas
@@ -173,6 +223,14 @@ export class AgentService {
                 if ((lastAIMessage as any).tool_calls?.length > 0) {
                    outputText = "Disculpa, me quedé a medias procesando tu solicitud. ¿Podrías repetirme qué necesitas?"
                 }
+            }
+
+            // 7.5 APLICAR CORRECCIONES POR COMPLIANCE VIOLATION (Si hay violación crítica)
+            if (hasComplianceViolation && inputValidation.detectedTriggers.includes('USER_CONFIRMATION')) {
+                // El usuario confirmó pero no se validó disponibilidad
+                // Reemplazar respuesta con una que fuerce validación
+                console.log(`[TOOL ENFORCEMENT] 🔄 Interceptando respuesta para forzar validación...`)
+                outputText = `Espera, estoy verificando disponibilidad en tiempo real... Un momento.`
             }
 
             // 7b. Recopilar pasos del agente para el panel de debug
@@ -239,6 +297,13 @@ export class AgentService {
             // 8. Guardar el intercambio en el historial de Postgres
             await chatHistory.addUserMessage(input)
             await chatHistory.addAIMessage(outputText)
+
+            // 8.5 VALIDAR RESPUESTA FINAL (Detectar alucinaciones)
+            const finalResponseValidation = validateFinalResponse(outputText, toolsUsed, inputValidation)
+            if (!finalResponseValidation.isValid) {
+                console.warn(`[RESPONSE VALIDATION] WARNING: Possible hallucinations detected:`, finalResponseValidation.issues)
+                // Loguear pero no rechazar - la respuesta ya fue enviada
+            }
 
             // 9. Registrar métricas de latencia y herramientas usadas
             const latencyMs = Date.now() - startTimestamp

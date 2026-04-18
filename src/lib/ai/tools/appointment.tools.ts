@@ -176,13 +176,14 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
                 if (!barbero_id || !servicio_id || !cliente_id || !cliente_nombre || !cliente_telefono || !timestamp_inicio || !timestamp_fin) {
                     return JSON.stringify({
                         status: 'error',
-                        error: 'Faltan campos requeridos',
+                        error: 'Faltan campos requeridos para agendar',
+                        instruccion_para_agente: '¡ALTO! No agendaste la cita porque te faltan campos. ¡NUNCA le digas al cliente que la cita está lista! Dile qué dato te falta (ej. el servicio, su nombre, con quién quiere agendar, etc) y pregúntaselo.',
                         campos_recibidos: { barbero_id, servicio_id, cliente_id, cliente_nombre, cliente_telefono, timestamp_inicio, timestamp_fin },
                         campos_faltantes: [
-                            !barbero_id && 'barbero_id',
-                            !servicio_id && 'servicio_id',
-                            !cliente_id && 'cliente_id',
-                            !cliente_nombre && 'cliente_nombre',
+                            !barbero_id && 'barbero_id (Pregunta con quién desea agendar)',
+                            !servicio_id && 'servicio_id (Pregunta qué servicio desea)',
+                            !cliente_id && 'cliente_id (Llama a BUSCAR_CLIENTE)',
+                            !cliente_nombre && 'cliente_nombre (Pide su nombre)',
                             !cliente_telefono && 'cliente_telefono',
                             !timestamp_inicio && 'timestamp_inicio',
                             !timestamp_fin && 'timestamp_fin',
@@ -214,7 +215,29 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
                     origen: 'whatsapp' as const
                 }
 
-                const { data, error } = await supabase
+                const { data, error: conflictError } = await supabase
+                    .from('citas')
+                    .select('id, timestamp_inicio, timestamp_fin')
+                    .eq('barbero_id', barbero_id)
+                    .eq('sucursal_id', sucursalId)
+                    .in('estado', ['confirmada', 'pendiente'])
+                    .lt('timestamp_inicio', tsFin.toISOString())
+                    .gt('timestamp_fin', tsInicio.toISOString())
+                    .limit(1)
+                    .maybeSingle()
+
+                if (conflictError) throw conflictError
+
+                if (data) {
+                    return JSON.stringify({
+                        status: 'error',
+                        error: 'BARBERO_NO_DISPONIBLE',
+                        instruccion_para_agente: 'El barbero ya tiene una cita en ese horario. Llama a DISPONIBILIDAD_HOY para encontrar el siguiente slot libre y ofrécelo al cliente.',
+                        slot_ocupado: { inicio: data.timestamp_inicio, fin: data.timestamp_fin }
+                    })
+                }
+
+                const { data: insertData, error } = await supabase
                     .from('citas')
                     .insert([insertPayload])
                     .select('id, sucursal_id, barbero_id, servicio_id, cliente_id, cliente_nombre, cliente_telefono, timestamp_inicio, timestamp_fin, estado, origen')
@@ -241,7 +264,7 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
 
                 return JSON.stringify({
                     status: 'ok',
-                    cita: data,
+                    cita: insertData,
                     _databaseInteraction: 'citas'
                 })
             } catch (error: any) {

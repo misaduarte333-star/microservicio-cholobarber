@@ -53,3 +53,13 @@ fix_hashes.js
 setup_test_data.js
 test-connection.js
 scripts/*.mjs
+
+# ============================================================================
+# PROJECT ORGANIZATION - Non-essential folders
+# ============================================================================
+# Documentation, logs, dev scripts, and test artifacts are not needed in git
+docs/
+logs/
+tests/
+dev-scripts/
+

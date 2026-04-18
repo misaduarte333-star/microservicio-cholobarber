@@ -69,8 +69,8 @@ export class TimeValidator {
             motivo = 'justo'
         }
 
-        // Si es rechazada o advertencia, buscar sugerencia
-        if (status === 'RECHAZADA' || motivo === 'justo') {
+        // Si es rechazada, buscar sugerencia (NO para justo - esa hora es válida)
+        if (status === 'RECHAZADA') {
             console.log(`[TimeValidator] Finding suggestion for motivo: ${motivo}, hF: ${hF}, cierre: ${horaCierre}`)
             // Caso especial: si es fuera de horario por ser tarde (>= horaCierre)
             if (hF >= horaCierre) {
@@ -127,9 +127,11 @@ export class TimeValidator {
             advertencia,
             ajustada,
             hora_solicitada_24h: this.formatHora24(hF, mF),
-            sugerencia_fecha,
-            siguiente_bloque: siguiente,
-            siguiente_bloque_12h: siguiente
+            sugerencia_fecha: status === 'VALIDA' ? 'hoy' : sugerencia_fecha,
+            // IMPORTANTE: siguiente_bloque solo se incluye cuando la hora está RECHAZADA.
+            // Si status=VALIDA, estos campos son null para que el agente NO ofrezca otra hora.
+            siguiente_bloque: status === 'RECHAZADA' ? siguiente : null,
+            siguiente_bloque_12h: status === 'RECHAZADA' && siguiente
                 ? this.formatHora12(parseInt(siguiente.split(':')[0]), parseInt(siguiente.split(':')[1]))
                 : null
         }

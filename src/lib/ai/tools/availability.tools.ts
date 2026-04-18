@@ -4,6 +4,7 @@ import { getAISupabaseClient } from './business.tools'
 import { TimeValidator } from './time-validator.tool'
 import { toDate, formatInTimeZone } from 'date-fns-tz'
 import { addMinutes } from 'date-fns'
+import { getSlotDuration, roundDurationTo30MinBlocks } from './slot-duration.helper'
 
 /**
  * Validador de hora stateless.
@@ -42,7 +43,12 @@ export const makeValidarHoraTool = (sucursalId: string, timezone: string = 'Amer
                 }
 
                 if (!hora) {
-                    return JSON.stringify({ status: 'error', message: 'Se requiere hora_solicitada y fecha', input_recibido: { hora_solicitada, fecha, slot_inicio } })
+                    return JSON.stringify({ 
+                        status: 'error', 
+                        message: 'Falta la hora_solicitada', 
+                        instruccion_para_agente: 'No puedes validar disponibilidad sin saber la hora. ¡NO asumas que el negocio está cerrado ni respondas cosas como "A esa hora ya cerramos"! Pregúntale al cliente "¿A qué hora te gustaría tu cita?" o usa DISPONIBILIDAD_HOY para ver todo el día.',
+                        input_recibido: { hora_solicitada, fecha, slot_inicio } 
+                    })
                 }
 
                 const todayStr = formatInTimeZone(new Date(), timezone, 'yyyy-MM-dd')
@@ -182,11 +188,6 @@ function makeDisponibilidadBase(sucursalId: string, toolName: string, descriptio
                     return JSON.stringify({ error: 'Formato de fecha/hora inválido', input_recibido: { fecha, hora } })
                 }
 
-                const dateEnd = addMinutes(dateStart, 30)
-
-                const isoStart = dateStart.toISOString()
-                const isoEnd = dateEnd.toISOString()
-
                 // Calcular dia de la semana
                 const dayOfWeek = formatInTimeZone(dateStart, timezone, 'eeee').toLowerCase()
                 const dayMap: any = {
@@ -199,12 +200,24 @@ function makeDisponibilidadBase(sucursalId: string, toolName: string, descriptio
 
                 const supabase = getAISupabaseClient()
 
-                // 0. Verificar horario de apertura de la sucursal
+                // 0. Verificar horario de apertura Y configuración de slots ANTES de calcular dateEnd
                 const { data: sucursalData } = await supabase
                     .from('sucursales')
-                    .select('horario_apertura')
+                    .select('horario_apertura, slot_booking_mode')
                     .eq('id', sucursalId)
                     .single()
+
+                // Determinar duración del slot según configuración de la sucursal
+                const slotBookingMode = (sucursalData?.slot_booking_mode || 'by_service') as 'fixed_30min' | 'fixed_1hour' | 'by_service'
+                const slotDurationMinutes = getSlotDuration(slotBookingMode, 30) // 30 min es default para DISPONIBILIDAD
+                
+                console.log(`[IA_DIAGNOSTIC] Slot booking mode: ${slotBookingMode}, duration: ${slotDurationMinutes} min`)
+
+                // AHORA calcular dateEnd con la duración correcta
+                const dateEnd = addMinutes(dateStart, slotDurationMinutes)
+
+                const isoStart = dateStart.toISOString()
+                const isoEnd = dateEnd.toISOString()
 
                 if (sucursalData?.horario_apertura) {
                     const horarioSucursal = sucursalData.horario_apertura[dayName] as { inicio: string; fin: string } | undefined
@@ -245,33 +258,33 @@ function makeDisponibilidadBase(sucursalId: string, toolName: string, descriptio
                     return JSON.stringify({ error: 'Error al consultar barberos' })
                 }
 
-                // 2. Citas ocupadas (Solo bloquean el slot donde COMIENZAN)
-                const { data: citasBusy } = await supabase
+                // 2. Traer todas las citas y bloqueos desde el slot actual hasta el fin del día
+                const endOfDay = new Date(dateStart)
+                endOfDay.setHours(23, 59, 59, 999)
+                const isoEndOfDay = endOfDay.toISOString()
+
+                const { data: citasFuturas } = await supabase
                     .from('citas')
-                    .select('barbero_id')
+                    .select('barbero_id, timestamp_inicio, timestamp_fin')
                     .eq('sucursal_id', sucursalId)
                     .neq('estado', 'cancelada')
-                    .eq('timestamp_inicio', isoStart)
+                    .lt('timestamp_inicio', isoEndOfDay)
+                    .gt('timestamp_fin', isoStart)
 
-                // 3. Bloqueos que se solapan
-                const { data: bloqueosBusy } = await supabase
+                const { data: bloqueosFuturos } = await supabase
                     .from('bloqueos')
-                    .select('barbero_id')
+                    .select('barbero_id, fecha_inicio, fecha_fin')
                     .eq('sucursal_id', sucursalId)
-                    .lt('fecha_inicio', isoEnd)
+                    .lt('fecha_inicio', isoEndOfDay)
                     .gt('fecha_fin', isoStart)
 
-                const isSucursalBlocked = (bloqueosBusy ?? []).some((b: any) => !b.barbero_id)
-
-                const busyIds = new Set<string>([
-                    ...(citasBusy ?? []).map((r: any) => r.barbero_id),
-                    ...(bloqueosBusy ?? []).map((r: any) => r.barbero_id).filter(Boolean),
-                ])
+                const isSucursalBlocked = (bloqueosFuturos ?? []).some((b: any) => !b.barbero_id && b.fecha_inicio < isoEnd && b.fecha_fin > isoStart)
 
                 const resultRows = barberos.map((b: any) => {
                     const workingHours = b.horario_laboral?.[dayName]
                     let estado = 'disponible'
                     let motivo = 'Libre'
+                    let proximo_turno_libre_a_las = undefined
 
                     if (isSucursalBlocked) {
                         estado = 'ocupado'
@@ -281,19 +294,61 @@ function makeDisponibilidadBase(sucursalId: string, toolName: string, descriptio
                         motivo = `No trabaja los ${dayName}s`
                     } else {
                         const slotTime = formatInTimeZone(dateStart, timezone, 'HH:mm')
-                        if (slotTime < workingHours.inicio || slotTime >= workingHours.fin) {
+                        
+                        // Filtrar sus propias citas y bloqueos
+                        const misCitas = (citasFuturas ?? []).filter((c: any) => c.barbero_id === b.id)
+                        const misBloqueos = (bloqueosFuturos ?? []).filter((bl: any) => bl.barbero_id === b.id)
+
+                        const checkCollision = (start: Date, end: Date, hhmm: string) => {
+                            const s = start.toISOString()
+                            const e = end.toISOString()
+                            // fuera de turno
+                            if (hhmm < workingHours.inicio || hhmm >= workingHours.fin) return true
+                            // almuerzo
+                            if (b.bloqueo_almuerzo && hhmm >= b.bloqueo_almuerzo.inicio && hhmm < b.bloqueo_almuerzo.fin) return true
+                            // citas
+                            if (misCitas.some((c: any) => c.timestamp_inicio < e && c.timestamp_fin > s)) return true
+                            // bloqueos
+                            if (misBloqueos.some((bl: any) => bl.fecha_inicio < e && bl.fecha_fin > s)) return true
+                            return false
+                        }
+
+                        // Verificar slot actual
+                        if (checkCollision(dateStart, dateEnd, slotTime)) {
                             estado = 'ocupado'
-                            motivo = `Fuera de su turno (${workingHours.inicio} - ${workingHours.fin})`
-                        } else if (b.bloqueo_almuerzo && slotTime >= b.bloqueo_almuerzo.inicio && slotTime < b.bloqueo_almuerzo.fin) {
-                            estado = 'ocupado'
-                            motivo = `En descanso/almuerzo (${b.bloqueo_almuerzo.inicio} - ${b.bloqueo_almuerzo.fin})`
-                        } else if (busyIds.has(b.id)) {
-                            estado = 'ocupado'
-                            motivo = 'Cita o bloqueo personal'
+                            
+                            if (slotTime < workingHours.inicio || slotTime >= workingHours.fin) {
+                                motivo = `Fuera de su turno (${workingHours.inicio} - ${workingHours.fin})`
+                            } else if (b.bloqueo_almuerzo && slotTime >= b.bloqueo_almuerzo.inicio && slotTime < b.bloqueo_almuerzo.fin) {
+                                motivo = `En descanso/almuerzo (${b.bloqueo_almuerzo.inicio} - ${b.bloqueo_almuerzo.fin})`
+                            } else {
+                                motivo = 'Cita o bloqueo personal'
+                                
+                                // Buscar el proximo slot libre en bloques de la duración configurada hasta el fin del turno
+                                let nextStart = addMinutes(dateStart, slotDurationMinutes)
+                                let nextEnd = addMinutes(nextStart, slotDurationMinutes)
+                                let nextHhmm = formatInTimeZone(nextStart, timezone, 'HH:mm')
+                                
+                                while (nextHhmm < workingHours.fin) {
+                                    if (!checkCollision(nextStart, nextEnd, nextHhmm)) {
+                                        // Encontramos un hueco!
+                                        // Convertimos a 12h para que el agente lo lea más fácil (opcional, pero útil)
+                                        const h = parseInt(nextHhmm.split(':')[0])
+                                        const m = nextHhmm.split(':')[1]
+                                        const h12 = h % 12 || 12
+                                        const ampm = h >= 12 ? 'PM' : 'AM'
+                                        proximo_turno_libre_a_las = `${h12}:${m} ${ampm}`
+                                        break
+                                    }
+                                    nextStart = addMinutes(nextStart, slotDurationMinutes)
+                                    nextEnd = addMinutes(nextStart, slotDurationMinutes)
+                                    nextHhmm = formatInTimeZone(nextStart, timezone, 'HH:mm')
+                                }
+                            }
                         }
                     }
 
-                    return { id: b.id, nombre: b.nombre, estado, motivo }
+                    return { id: b.id, nombre: b.nombre, estado, motivo, proximo_turno_libre_a_las }
                 })
 
                 return JSON.stringify({

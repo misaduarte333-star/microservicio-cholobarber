@@ -35,6 +35,40 @@ export interface IncomingMessage {
 export class DebouncerService {
     private readonly DEBOUNCE_TIME_MS = 3000 // 3 seconds configured as per user setup
     private readonly UNSENT_KEY_PREFIX = 'unsent:'
+    private readonly MANUAL_MODE_PREFIX = 'manual_mode:'
+
+    /**
+     * Revisa si un chat específico está en modo manual (agente pausado).
+     */
+    public async getManualMode(sucursalId: string, phone: string): Promise<boolean> {
+        if (redis.status !== 'ready') return false
+        try {
+            const key = `${this.MANUAL_MODE_PREFIX}${sucursalId}:${phone}`
+            const val = await redis.get(key)
+            return val === 'true'
+        } catch {
+            return false
+        }
+    }
+
+    /**
+     * Activa o desactiva el modo manual para un chat.
+     * @param enabled true para pausar el agente, false para activarlo.
+     */
+    public async setManualMode(sucursalId: string, phone: string, enabled: boolean): Promise<void> {
+        if (redis.status !== 'ready') return
+        try {
+            const key = `${this.MANUAL_MODE_PREFIX}${sucursalId}:${phone}`
+            if (enabled) {
+                // Modo manual activo por 24 horas
+                await redis.set(key, 'true', 'EX', 86400)
+            } else {
+                await redis.del(key)
+            }
+        } catch (err: any) {
+            console.warn(`[Debouncer] Error setting manual mode: ${err.message}`)
+        }
+    }
 
     /**
      * Empuja un mensaje al buffer de Redis para este turno e inicia el timer si no existía.
