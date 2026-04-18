@@ -23,6 +23,7 @@ const CHOLO_BARBER_ID = 'f07a7640-9d86-499f-a048-24109345787a'
  * 5. Send message back to Evolution API.
  */
 export async function POST(req: Request) {
+    try {
         console.info(`[Webhook] Incoming request: ${req.method} ${req.url}`)
         const payload = await req.json()
         console.dir(payload, { depth: null })
