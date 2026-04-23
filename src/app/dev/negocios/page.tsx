@@ -35,7 +35,10 @@ export default function GestorNegocios() {
         agent_name: 'BarberBot',
         agent_personality: 'Friendly',
         agent_instance_name: '',
+        agent_instance_name: '',
         agent_evolution_key: '',
+        agent_enabled: true,  // Webhook Evo
+        agent_active: true,   // IA Bot
         llm_provider: '', // default a global
         llm_model: '',
         // Tipo Prestador
@@ -47,6 +50,38 @@ export default function GestorNegocios() {
         minutos_tardanza_mensaje: 15
     })
 
+    const [testConnLoading, setTestConnLoading] = useState(false)
+    const [testConnResult, setTestConnResult] = useState<{success: boolean, msg: string} | null>(null)
+    
+    const [cardTests, setCardTests] = useState<Record<string, { loading: boolean, status: 'success' | 'error' | null, msg: string }>>({})
+    const [appOrigin, setAppOrigin] = useState('')
+
+    const checkAllConnections = async (list: SucursalConStats[]) => {
+        list.forEach(async (s) => {
+            if (!s.agent_instance_name || !s.agent_enabled) return
+            
+            setCardTests(prev => ({ ...prev, [s.id]: { loading: true, status: null, msg: '' } }))
+            try {
+                const res = await fetch('/api/dev/evolution/check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        instanceName: s.agent_instance_name,
+                        evolutionKey: s.agent_evolution_key
+                    })
+                })
+                const data = await res.json()
+                if (res.ok && data.success) {
+                    setCardTests(prev => ({ ...prev, [s.id]: { loading: false, status: data.state === 'open' ? 'success' : 'error', msg: data.state } }))
+                } else {
+                    setCardTests(prev => ({ ...prev, [s.id]: { loading: false, status: 'error', msg: 'Sin conexión' } }))
+                }
+            } catch (err) {
+                setCardTests(prev => ({ ...prev, [s.id]: { loading: false, status: 'error', msg: 'Error de red' } }))
+            }
+        })
+    }
+
     const fetchSucursales = async () => {
         setLoading(true)
         try {
@@ -54,6 +89,7 @@ export default function GestorNegocios() {
             const data = await res.json()
             if (!res.ok) throw new Error(data.error)
             setSucursales(data.sucursales || [])
+            checkAllConnections(data.sucursales || [])
         } catch (err) {
             setError(formatError(err))
         } finally {
@@ -63,6 +99,9 @@ export default function GestorNegocios() {
 
     useEffect(() => {
         fetchSucursales()
+        if (typeof window !== 'undefined') {
+            setAppOrigin(window.location.origin)
+        }
     }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -81,6 +120,8 @@ export default function GestorNegocios() {
                 agent_personality: form.agent_personality,
                 agent_instance_name: form.agent_instance_name,
                 agent_evolution_key: form.agent_evolution_key,
+                agent_enabled: form.agent_enabled,
+                agent_active: form.agent_active,
                 llm_provider: form.llm_provider || null,
                 llm_model: form.llm_model || null,
                 tipo_prestador: form.tipo_prestador,
@@ -120,6 +161,8 @@ export default function GestorNegocios() {
                 agent_personality: 'Friendly',
                 agent_instance_name: '',
                 agent_evolution_key: '',
+                agent_enabled: true,
+                agent_active: true,
                 llm_provider: '',
                 llm_model: '',
                 tipo_prestador: 'barbero',
@@ -130,6 +173,7 @@ export default function GestorNegocios() {
             })
             setIsCreating(false)
             setEditingId(null)
+            setTestConnResult(null)
             fetchSucursales()
             alert(isEditing ? 'Configuración actualizada con éxito.' : 'Negocio y Administrador creados con éxito.')
         } catch (err) {
@@ -149,6 +193,8 @@ export default function GestorNegocios() {
             agent_personality: s.agent_personality || 'Friendly',
             agent_instance_name: s.agent_instance_name || '',
             agent_evolution_key: s.agent_evolution_key || '',
+            agent_enabled: s.agent_enabled !== undefined ? s.agent_enabled : true,
+            agent_active: s.agent_active !== undefined ? s.agent_active : true,
             llm_provider: s.llm_provider || '',
             llm_model: s.llm_model || '',
             tipo_prestador: s.tipo_prestador || 'barbero',
@@ -159,6 +205,7 @@ export default function GestorNegocios() {
         })
         setEditingId(s.id)
         setIsCreating(true)
+        setTestConnResult(null)
         window.scrollTo({ top: 0, behavior: 'smooth' })
     }
 
@@ -180,6 +227,24 @@ export default function GestorNegocios() {
         }
     }
 
+    const toggleField = async (id: string, field: string, currentValue: boolean) => {
+        try {
+            const res = await fetch('/api/dev/negocios', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, [field]: !currentValue })
+            })
+
+            if (!res.ok) {
+                const err = await res.json()
+                throw new Error(err.error)
+            }
+            fetchSucursales()
+        } catch (err) {
+            alert(`Error al actualizar estado: ` + formatError(err))
+        }
+    }
+
     const handleDelete = async (id: string, nombre: string) => {
         if (!window.confirm(`Estas seguro de eliminar "${nombre}"?\n\nSe eliminaran TODOS sus datos: barberos, servicios, citas, admins y costos.\n\nEsta accion no se puede deshacer.`)) {
             return
@@ -196,6 +261,65 @@ export default function GestorNegocios() {
             fetchSucursales()
         } catch (err) {
             alert('Error al eliminar: ' + formatError(err))
+        }
+    }
+
+    const handleTestConnection = async () => {
+        if (!form.agent_instance_name) {
+            setTestConnResult({ success: false, msg: 'Ingresa el nombre de la instancia' })
+            return
+        }
+
+        setTestConnLoading(true)
+        setTestConnResult(null)
+        try {
+            const res = await fetch('/api/dev/evolution/check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    instanceName: form.agent_instance_name,
+                    evolutionKey: form.agent_evolution_key
+                })
+            })
+            const data = await res.json()
+            if (res.ok && data.success) {
+                setTestConnResult({ 
+                    success: true, 
+                    msg: `¡Conexión exitosa! Estado: ${data.state} | Status: ${data.status}` 
+                })
+            } else {
+                setTestConnResult({ success: false, msg: data.error || 'Error desconocido' })
+            }
+        } catch (err) {
+            setTestConnResult({ success: false, msg: formatError(err) })
+        } finally {
+            setTestConnLoading(false)
+        }
+    }
+
+    const testCardConnection = async (s: SucursalConStats) => {
+        if (!s.agent_instance_name) {
+            setCardTests(prev => ({ ...prev, [s.id]: { loading: false, status: 'error', msg: 'Sin instancia' } }))
+            return
+        }
+        setCardTests(prev => ({ ...prev, [s.id]: { loading: true, status: null, msg: '' } }))
+        try {
+            const res = await fetch('/api/dev/evolution/check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    instanceName: s.agent_instance_name,
+                    evolutionKey: s.agent_evolution_key
+                })
+            })
+            const data = await res.json()
+            if (res.ok && data.success) {
+                setCardTests(prev => ({ ...prev, [s.id]: { loading: false, status: data.state === 'open' ? 'success' : 'error', msg: `${data.state}` } }))
+            } else {
+                setCardTests(prev => ({ ...prev, [s.id]: { loading: false, status: 'error', msg: data.error || 'Error EvoAPI' } }))
+            }
+        } catch (err) {
+            setCardTests(prev => ({ ...prev, [s.id]: { loading: false, status: 'error', msg: 'Error de red' } }))
         }
     }
 
@@ -338,7 +462,31 @@ export default function GestorNegocios() {
                             )}
 
                             <div className="pt-6 border-t border-slate-700/50">
-                                <h3 className="text-sm font-bold text-purple-400 uppercase tracking-wider mb-4">Configuración Agente IA</h3>
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-sm font-bold text-purple-400 uppercase tracking-wider">Configuración Agente IA</h3>
+                                    
+                                    <div className="flex gap-6">
+                                        <label className="flex items-center gap-2 cursor-pointer" title="Ignora todos los mensajes de esta instancia de Evolution API si se apaga">
+                                            <span className="text-xs font-bold text-slate-300">Conexión Evolution</span>
+                                            <div 
+                                                onClick={() => setForm({ ...form, agent_enabled: !form.agent_enabled })}
+                                                className={`w-10 h-5 rounded-full relative transition-colors shadow-inner ${form.agent_enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                                            >
+                                                <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all shadow-sm ${form.agent_enabled ? 'right-1' : 'left-1'}`} />
+                                            </div>
+                                        </label>
+
+                                        <label className="flex items-center gap-2 cursor-pointer" title="Apaga el bot de IA, pero la instancia sigue conectada recibiendo mensajes (modo pausa manual general)">
+                                            <span className="text-xs font-bold text-slate-300">Bot IA Activo</span>
+                                            <div 
+                                                onClick={() => setForm({ ...form, agent_active: !form.agent_active })}
+                                                className={`w-10 h-5 rounded-full relative transition-colors shadow-inner ${form.agent_active ? 'bg-purple-500' : 'bg-slate-700'}`}
+                                            >
+                                                <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all shadow-sm ${form.agent_active ? 'right-1' : 'left-1'}`} />
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
 
                                 {/* ===== TIPO PRESTADOR - Campo Destacado ===== */}
                                 <div className="mb-6 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
@@ -426,7 +574,7 @@ export default function GestorNegocios() {
                                             <option value="Funny">Divertido / Informal</option>
                                         </select>
                                     </div>
-                                    <div>
+                                    <div className="flex flex-col">
                                         <label className="block text-sm font-medium text-slate-300 mb-2">Instancia Evolution API</label>
                                         <input
                                             type="text"
@@ -436,15 +584,30 @@ export default function GestorNegocios() {
                                             placeholder="Nombre de la instancia"
                                         />
                                     </div>
-                                    <div>
+                                    <div className="flex flex-col">
                                         <label className="block text-sm font-medium text-slate-300 mb-2">Evolution API Key (Opcional)</label>
                                         <input
                                             type="text"
                                             value={form.agent_evolution_key}
                                             onChange={(e) => setForm({ ...form, agent_evolution_key: e.target.value })}
                                             className="input-field w-full bg-slate-900 border-slate-700"
-                                            placeholder="Llave específica para esta sucursal"
+                                            placeholder="Usar key global si está vacío"
                                         />
+                                    </div>
+                                    <div className="flex flex-col justify-end pb-1 lg:col-span-1 md:col-span-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleTestConnection}
+                                            disabled={testConnLoading}
+                                            className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-800/50 text-purple-400 border border-purple-500/30 rounded-lg text-xs font-bold transition-colors w-full shadow-sm"
+                                        >
+                                            {testConnLoading ? 'Probando...' : 'Probar Conexión Evolution API'}
+                                        </button>
+                                        {testConnResult && (
+                                            <div className={`mt-2 p-2 rounded text-[10px] ${testConnResult.success ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                                                {testConnResult.msg}
+                                            </div>
+                                        )}
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-slate-300 mb-2">Proveedor Custom (Dejar vacío=Global)</label>
@@ -639,6 +802,16 @@ export default function GestorNegocios() {
                             </div>
 
                             <div className="space-y-2 mb-4 text-sm text-slate-300">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-500">Bot IA:</span>
+                                    <button 
+                                        onClick={() => toggleField(s.id, 'agent_active', s.agent_active)}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all active:scale-95 hover:opacity-80 border ${s.agent_active ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'bg-slate-700/50 text-slate-400 border-slate-600/50'}`}
+                                        title="Clic para pausar o activar el Agente de IA"
+                                    >
+                                        {s.agent_active ? 'ONLINE' : 'OFFLINE'}
+                                    </button>
+                                </div>
                                 <div className="flex justify-between">
                                     <span className="text-slate-500">Plan:</span>
                                     <span className="capitalize font-medium text-emerald-300">{s.plan}</span>
@@ -661,8 +834,49 @@ export default function GestorNegocios() {
                                         <span className="text-xs text-amber-300 truncate max-w-[200px]">{s._stats.admin_email}</span>
                                     </div>
                                 )}
-                                <div className="flex justify-between">
-                                    <span className="text-slate-500">Ultima cita:</span>
+                                
+                                {/* Unificado Webhook e Instancia Evo */}
+                                <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-700/50 bg-slate-900/30 -mx-6 px-6 pb-2">
+                                    <div className="flex flex-col">
+                                        <span className="text-slate-500 text-xs mb-1">
+                                            Instancia Evo: <span className="text-slate-300 font-mono">{s.agent_instance_name || 'No asignada'}</span>
+                                        </span>
+                                        
+                                        <div 
+                                            className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity" 
+                                            onClick={() => toggleField(s.id, 'agent_enabled', s.agent_enabled)}
+                                            title="Clic para habilitar o deshabilitar la recepción del Webhook"
+                                        >
+                                            {cardTests[s.id]?.loading ? (
+                                                <div className="w-2.5 h-2.5 rounded-full border border-t-transparent border-slate-400 animate-spin" />
+                                            ) : !s.agent_enabled ? (
+                                                <div className="w-2.5 h-2.5 rounded-full bg-slate-600" />
+                                            ) : cardTests[s.id]?.status === 'success' ? (
+                                                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
+                                            ) : (
+                                                <div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                                            )}
+                                            
+                                            <span className={`text-[10px] font-bold ${!s.agent_enabled ? 'text-slate-500' : cardTests[s.id]?.status === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                {!s.agent_enabled ? 'WEBHOOK APAGADO' : cardTests[s.id]?.status === 'success' ? 'RECIBIENDO MENSAJES' : 'SIN CONEXIÓN EVOLUTION'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    {s.agent_instance_name && (
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); testCardConnection(s); }}
+                                            disabled={cardTests[s.id]?.loading}
+                                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors border border-slate-700 shadow-sm"
+                                            title="Actualizar estado de conexión"
+                                        >
+                                            <svg className={`w-3.5 h-3.5 ${cardTests[s.id]?.loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                        </button>
+                                    )}
+                                </div>
+                                
+                                <div className="flex justify-between pt-2">
+                                    <span className="text-slate-500 text-xs">Ultima cita:</span>
                                     <span className={s._stats.ultima_cita ? 'text-slate-300' : 'text-slate-600'}>
                                         {s._stats.ultima_cita ? formatTimeAgo(s._stats.ultima_cita) : 'Sin actividad'}
                                     </span>

@@ -119,7 +119,7 @@ export async function POST(req: Request) {
             const { data } = await supabase
                 .from('sucursales')
                 .select('*')
-                .eq('evolution_instance', instanceName)
+                .eq('agent_instance_name', instanceName)
                 .eq('agent_enabled', true)
                 .single()
             sucursal = data
@@ -172,7 +172,7 @@ export async function POST(req: Request) {
 
         const sessionId = `${sucursal.id}:${senderPhone}`
         const apiBase = configIa.evolution_api_url.endsWith('/') ? configIa.evolution_api_url : `${configIa.evolution_api_url}/`
-        const evoToken = sucursal.evolution_key || configIa.evolution_api_key
+        const evoToken = sucursal.agent_evolution_key || configIa.evolution_api_key
         const evoEndpoint = `${apiBase}message/sendText/${instanceName}`
 
         console.info(`[Webhook] Processing session ${sessionId}`)

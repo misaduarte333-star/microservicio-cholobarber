@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     try {
         const { 
             nombre, slug, plan, adminEmail, adminPassword, telefono_whatsapp,
-            agent_name, agent_personality, agent_instance_name, agent_evolution_key,
+            agent_name, agent_personality, agent_instance_name, agent_evolution_key, agent_enabled, agent_active,
             tipo_prestador, tipo_prestador_label,
             llm_provider, llm_model,
             recordatorios_activos, minutos_antes_recordatorio, minutos_tardanza_mensaje
@@ -90,7 +90,8 @@ export async function POST(req: NextRequest) {
                     agent_personality,
                     agent_instance_name,
                     agent_evolution_key,
-                    agent_enabled: true,
+                    agent_enabled: agent_enabled !== undefined ? agent_enabled : true,
+                    agent_active: agent_active !== undefined ? agent_active : true,
                     llm_provider: llm_provider || null,
                     llm_model: llm_model || null,
                     tipo_prestador: tipo_prestador || 'barbero',
