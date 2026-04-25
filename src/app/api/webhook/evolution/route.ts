@@ -90,7 +90,11 @@ export async function POST(req: Request) {
 
             const selectedId = await debouncerService.getTestBranch(senderPhone)
             if (selectedId) {
-                const { data } = await supabase.from('sucursales').select('*').eq('id', selectedId).single()
+                const { data } = await supabase.from('sucursales')
+                    .select('*')
+                    .eq('id', selectedId)
+                    .eq('agent_enabled', true)
+                    .single()
                 sucursal = data
             }
 
@@ -126,8 +130,14 @@ export async function POST(req: Request) {
         }
 
         if (!sucursal) {
-            console.warn(`[Webhook] Instancia ${instanceName} no configurada o agente inactivo para sesión ${senderPhone}.`)
+            console.warn(`[Webhook] Instancia ${instanceName} no configurada, deshabilitada o agente inactivo para sesión ${senderPhone}.`)
             return NextResponse.json({ received: true })
+        }
+
+        // --- VALIDACIÓN DE BOT ACTIVO ---
+        if (sucursal.agent_active === false) {
+            console.info(`[Webhook] Agente IA desactivado globalmente para ${sucursal.nombre}. Ignorando respuesta.`)
+            return NextResponse.json({ received: true, action: 'agent_inactive' })
         }
 
         // --- LÓGICA DE MODO MANUAL / INTERVENCIÓN ---
