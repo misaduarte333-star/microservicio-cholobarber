@@ -23,11 +23,25 @@ export async function GET() {
             return NextResponse.json({ error: error.message }, { status: 500 })
         }
 
-        return NextResponse.json({ config: data || null })
+        // Si no hay datos en la DB, o para campos nulos, usar variables de entorno como fallback
+        const config = {
+            evolution_api_url: data?.evolution_api_url || process.env.EVOLUTION_API_URL || '',
+            evolution_api_key: data?.evolution_api_key || process.env.EVOLUTION_API_KEY || '',
+            openai_api_key: data?.openai_api_key || process.env.OPENAI_API_KEY || '',
+            anthropic_api_key: data?.anthropic_api_key || process.env.ANTHROPIC_API_KEY || '',
+            groq_api_key: data?.groq_api_key || process.env.GROQ_API_KEY || '',
+            default_provider: data?.default_provider || 'openai',
+            openai_model: data?.openai_model || 'gpt-4o-mini',
+            anthropic_model: data?.anthropic_model || 'claude-3-5-sonnet-20240620',
+            groq_model: data?.groq_model || 'llama-3.1-70b-versatile'
+        }
+
+        return NextResponse.json({ config })
     } catch (err: any) {
         return NextResponse.json({ error: err.message }, { status: 500 })
     }
 }
+
 
 /**
  * POST /api/dev/config-ia

@@ -75,11 +75,13 @@ export async function GET(req: NextRequest) {
         const { data } = await supabase.from('configuracion_ia_global').select('evolution_api_url, evolution_api_key').eq('id', 1).single()
         const config = data as any
         
-        if (config && config.evolution_api_url) {
-            const evoUrl = config.evolution_api_url
-            const evoKey = config.evolution_api_key
+        // Determinar URL y Key usando DB con fallback a ENV
+        const evoUrl = config?.evolution_api_url || process.env.EVOLUTION_API_URL
+        const evoKey = config?.evolution_api_key || process.env.EVOLUTION_API_KEY
 
+        if (evoUrl) {
             // --- AQUÍ EMPIEZA LA MEDICIÓN REAL DE EVOLUTION ---
+
             const startEvo = performance.now()
             const response = await fetch(`${evoUrl}/instance/fetchInstances`, {
                 method: 'GET',

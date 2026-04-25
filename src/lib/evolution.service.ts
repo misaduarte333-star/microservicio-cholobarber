@@ -20,13 +20,15 @@ export class EvolutionService {
                 .eq('id', 1)
                 .single()
             const config = data as any
+            const evoUrlRaw = config?.evolution_api_url || process.env.EVOLUTION_API_URL
+            const apikey = config?.evolution_api_key || process.env.EVOLUTION_API_KEY
 
-            if (error || !config || !config.evolution_api_url) {
-                return { success: false, message: 'Falta configuración global de Evolution en Supabase.' }
+            if (!evoUrlRaw) {
+                return { success: false, message: 'Falta configuración global de Evolution (DB y ENV vacíos).' }
             }
 
-            const evoBaseUrl = config.evolution_api_url.endsWith('/') ? config.evolution_api_url : `${config.evolution_api_url}/`
-            const apikey = config.evolution_api_key
+            const evoBaseUrl = evoUrlRaw.endsWith('/') ? evoUrlRaw : `${evoUrlRaw}/`
+
             const instance = process.env.EVOLUTION_INSTANCE || 'barberia'
             // Priorizar variable de entorno pública en lugar de la URL interna del contenedor
             // (dentro de Docker/EasyPanel, req.url puede resolver a 0.0.0.0 o a localhost)

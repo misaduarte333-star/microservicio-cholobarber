@@ -80,7 +80,7 @@ export async function POST(req: Request) {
             const { data } = await supabase.from('sucursales').select('*').eq('id', CHOLO_BARBER_ID).single()
             sucursal = data
         } 
-        else if (instanceName === 'barberia') {
+        else if (instanceName === 'barberia' || instanceName === 'pruebas') {
             // Instancia de PRUEBAS multi-negocio
             if (cleanMessageText === 'reiniciar pruebas' || cleanMessageText === '/reset') {
                 await debouncerService.setTestBranch(senderPhone, null)
