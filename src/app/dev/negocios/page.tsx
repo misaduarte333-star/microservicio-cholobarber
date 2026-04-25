@@ -330,6 +330,7 @@ export default function GestorNegocios() {
     }
 
     const isDev = (s: SucursalConStats) => s.slug === 'negocio-principal'
+    const isPruebas = (s: SucursalConStats) => s.agent_instance_name === 'pruebas' || s.nombre.toLowerCase() === 'pruebas'
 
     const formatTimeAgo = (dateStr: string) => {
         const diff = Date.now() - new Date(dateStr).getTime()
@@ -738,12 +739,22 @@ export default function GestorNegocios() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {sucursales.map((s) => (
-                        <div key={s.id} className={`glass-card p-6 transition-colors ${isDev(s) ? 'border-purple-500/30 hover:border-purple-500/50' : 'border-slate-700/50 hover:border-emerald-500/30'}`}>
+                        <div key={s.id} className={`glass-card p-6 transition-colors ${
+                            isPruebas(s) 
+                                ? 'border-indigo-500/50 bg-indigo-500/5 shadow-indigo-500/10 shadow-lg' 
+                                : isDev(s) 
+                                    ? 'border-purple-500/30 hover:border-purple-500/50' 
+                                    : 'border-slate-700/50 hover:border-emerald-500/30'
+                        }`}>
                             <div className="flex items-start justify-between mb-4">
                                 <div>
                                     <div className="flex items-center gap-2">
-                                        <h3 className="text-lg font-bold text-white">{s.nombre}</h3>
-                                        {isDev(s) && (
+                                        <h3 className="text-lg font-bold text-white">
+                                            {isPruebas(s) ? '🧪 Depurador de Instancia' : s.nombre}
+                                        </h3>
+                                        {isPruebas(s) ? (
+                                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 uppercase tracking-widest border border-indigo-500/30">Debugger</span>
+                                        ) : isDev(s) && (
                                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-400 uppercase">Dev</span>
                                         )}
                                     </div>
@@ -762,21 +773,27 @@ export default function GestorNegocios() {
                                 </div>
                             </div>
 
-                            {/* Stats Grid */}
-                            <div className="grid grid-cols-3 gap-2 mb-4">
-                                <div className="bg-slate-800/50 rounded-lg p-2 text-center">
-                                    <p className="text-lg font-bold text-white">{s._stats.barberos_activos}</p>
-                                    <p className="text-[10px] text-slate-500 uppercase">Barberos</p>
+                            {/* Stats Grid - Hidden for Debugger */}
+                            {!isPruebas(s) ? (
+                                <div className="grid grid-cols-3 gap-2 mb-4">
+                                    <div className="bg-slate-800/50 rounded-lg p-2 text-center">
+                                        <p className="text-lg font-bold text-white">{s._stats.barberos_activos}</p>
+                                        <p className="text-[10px] text-slate-500 uppercase">Barberos</p>
+                                    </div>
+                                    <div className="bg-slate-800/50 rounded-lg p-2 text-center">
+                                        <p className="text-lg font-bold text-white">{s._stats.servicios_activos}</p>
+                                        <p className="text-[10px] text-slate-500 uppercase">Servicios</p>
+                                    </div>
+                                    <div className="bg-slate-800/50 rounded-lg p-2 text-center">
+                                        <p className="text-lg font-bold text-white">{s._stats.citas_total}</p>
+                                        <p className="text-[10px] text-slate-500 uppercase">Citas</p>
+                                    </div>
                                 </div>
-                                <div className="bg-slate-800/50 rounded-lg p-2 text-center">
-                                    <p className="text-lg font-bold text-white">{s._stats.servicios_activos}</p>
-                                    <p className="text-[10px] text-slate-500 uppercase">Servicios</p>
+                            ) : (
+                                <div className="mb-4 p-3 rounded-lg bg-indigo-950/30 border border-indigo-500/20 text-[11px] text-indigo-300 italic">
+                                    Esta instancia se utiliza para validar el flujo de ruteo y respuesta de los agentes en tiempo real sin afectar datos productivos.
                                 </div>
-                                <div className="bg-slate-800/50 rounded-lg p-2 text-center">
-                                    <p className="text-lg font-bold text-white">{s._stats.citas_total}</p>
-                                    <p className="text-[10px] text-slate-500 uppercase">Citas</p>
-                                </div>
-                            </div>
+                            )}
                             
                             <div className="grid grid-cols-2 gap-2 mb-4">
                                 <Link

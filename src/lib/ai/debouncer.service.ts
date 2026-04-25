@@ -67,6 +67,37 @@ export class DebouncerService {
     }
 
     /**
+     * Limpia completamente la sesión para un teléfono:
+     * 1. Borra el buffer de mensajes de Redis.
+     * 2. Borra el timer de Redis.
+     * 3. (Opcional) Borra el historial de conversación si se le pasa el sessionId.
+     */
+    public async clearSession(phone: string, sucursalId: string, sessionId?: string): Promise<void> {
+        if (redis.status !== 'ready') return
+        try {
+            const listKey = `buffer:${sucursalId}:${phone}`
+            const timerKey = `timer:${sucursalId}:${phone}`
+            const unsentKey = `${this.UNSENT_KEY_PREFIX}${sucursalId}:${phone}`
+            
+            await Promise.all([
+                redis.del(listKey),
+                redis.del(timerKey),
+                redis.del(unsentKey)
+            ])
+
+            if (sessionId) {
+                const { MemoryService } = await import('./memory.service')
+                const chatHistory = await MemoryService.getChatHistory(sessionId)
+                await chatHistory.clear()
+            }
+            
+            console.info(`[Debouncer] Sesión LIMPIADA para ${phone} (Sucursal: ${sucursalId})`)
+        } catch (err: any) {
+            console.warn(`[Debouncer] Error clearing session: ${err.message}`)
+        }
+    }
+
+    /**
      * Revisa si un chat específico está en modo manual (agente pausado).
      */
     public async getManualMode(sucursalId: string, phone: string): Promise<boolean> {
@@ -205,8 +236,9 @@ export class DebouncerService {
             // Mostrar estado "Escribiendo..."
             if (evoToken && (ctx as any).apiBase) {
                 const apiBase = (ctx as any).apiBase
-                const instanceName = (ctx as any).instanceName || evoEndpoint.split('/').pop()
-                await EvolutionService.sendPresence(apiBase, evoToken, instanceName, remoteJid, 'composing')
+                // IMPORTANTE: La presencia DEBE ir a la instancia que originó el mensaje
+                const presenceInstance = (ctx as any).presenceInstance || (ctx as any).instanceName || evoEndpoint.split('/').pop()
+                await EvolutionService.sendPresence(apiBase, evoToken, presenceInstance, remoteJid, 'composing')
             }
 
             // Llamar al LLM!

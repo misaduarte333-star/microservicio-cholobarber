@@ -84,8 +84,13 @@ export async function POST(req: Request) {
         else if (instanceName === 'barberia' || instanceName === 'pruebas') {
             // Instancia de PRUEBAS multi-negocio
             if (cleanMessageText === 'reiniciar pruebas' || cleanMessageText === '/reset') {
+                const currentTestBranch = await debouncerService.getTestBranch(senderPhone)
+                if (currentTestBranch) {
+                    // Limpieza profunda: Redis + Historial de Postgres
+                    await debouncerService.clearSession(senderPhone, currentTestBranch, senderPhone)
+                }
                 await debouncerService.setTestBranch(senderPhone, null)
-                await EvolutionService.sendTextMessage(process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, '🔄 Sesión de pruebas reiniciada. Envía cualquier mensaje para elegir negocio.')
+                await EvolutionService.sendTextMessage(process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, '🔄 Pruebas reiniciadas. Historial borrado.\n\nEnvía cualquier mensaje para elegir negocio.')
                 return NextResponse.json({ received: true, action: 'test_reset' })
             }
 
@@ -101,7 +106,11 @@ export async function POST(req: Request) {
 
             if (!sucursal) {
                 // No hay selección o el ID ya no es válido -> Listar negocios
-                const { data: sucursales } = await supabase.from('sucursales').select('id, nombre').eq('agent_enabled', true)
+                const { data: sucursales } = await supabase.from('sucursales')
+                    .select('id, nombre')
+                    .eq('agent_enabled', true)
+                    .neq('nombre', 'Pruebas') // No mostrar el negocio comodín de pruebas
+                    .neq('agent_instance_name', 'pruebas')
                 
                 // Verificar si el mensaje del usuario coincide con algún nombre de negocio
                 const match = sucursales?.find(s => cleanMessageText.includes(s.nombre.toLowerCase()))
@@ -230,8 +239,11 @@ export async function POST(req: Request) {
                 openaiKey,
                 anthropicKey,
                 groqKey,
-                // Passing auth variables so the Debouncer can reply async
-                ...( { evoToken, evoEndpoint, apiBase, instanceName: targetInstance } as any)
+                evoToken,
+                evoEndpoint,
+                apiBase,
+                instanceName: targetInstance,
+                presenceInstance: instanceName // Forzar presencia en la instancia de origen
             }
         })
 
