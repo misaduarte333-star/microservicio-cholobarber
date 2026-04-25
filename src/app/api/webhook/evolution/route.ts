@@ -35,11 +35,12 @@ export async function POST(req: Request) {
         }
 
         // 1. Resolver instancia
-        const instanceName = payload.instance
-        if (!instanceName) {
+        const rawInstanceName = payload.instance
+        if (!rawInstanceName) {
             console.warn('[Webhook] No instance name attached.')
             return NextResponse.json({ received: true })
         }
+        const instanceName = rawInstanceName.toLowerCase()
 
         // 2. Extraer datos del mensaje
         const remoteJid = payload.data.key.remoteJid
@@ -75,7 +76,7 @@ export async function POST(req: Request) {
         let sucursal: any = null
 
         // --- LÓGICA DE RUTEO POR INSTANCIA ---
-        if (instanceName === 'cholobarber') {
+        if (instanceName === 'cholobarber' || instanceName === 'cholobarber_v2') {
             // Instancia EXCLUSIVA de producción: Cholo Barber
             const { data } = await supabase.from('sucursales').select('*').eq('id', CHOLO_BARBER_ID).single()
             sucursal = data
@@ -119,20 +120,28 @@ export async function POST(req: Request) {
             }
         } 
         else {
-            // Instancia estándar: buscar por mapeo en DB
+            // Instancia estándar: buscar por mapeo en DB (ignorar mayúsculas/minúsculas)
             const { data } = await supabase
                 .from('sucursales')
                 .select('*')
-                .eq('agent_instance_name', instanceName)
+                .ilike('agent_instance_name', instanceName)
                 .eq('agent_enabled', true)
                 .single()
             sucursal = data
         }
 
         if (!sucursal) {
-            console.warn(`[Webhook] Instancia ${instanceName} no configurada, deshabilitada o agente inactivo para sesión ${senderPhone}.`)
+            console.warn(`[Webhook] Instancia ${rawInstanceName} no configurada, deshabilitada o agente inactivo para sesión ${senderPhone}.`)
             return NextResponse.json({ received: true })
         }
+
+        // Definir el nombre real de la instancia para usar en endpoints de Evolution
+        // Si estamos en modo pruebas, usamos el nombre del webhook ('pruebas' o 'barberia')
+        // Si no, usamos lo que diga la DB para ese negocio
+        const targetInstance = (instanceName === 'barberia' || instanceName === 'pruebas') 
+            ? rawInstanceName 
+            : (sucursal.agent_instance_name || rawInstanceName)
+
 
         // --- VALIDACIÓN DE BOT ACTIVO ---
         if (sucursal.agent_active === false) {
@@ -183,9 +192,9 @@ export async function POST(req: Request) {
         const sessionId = `${sucursal.id}:${senderPhone}`
         const apiBase = configIa.evolution_api_url.endsWith('/') ? configIa.evolution_api_url : `${configIa.evolution_api_url}/`
         const evoToken = sucursal.agent_evolution_key || configIa.evolution_api_key
-        const evoEndpoint = `${apiBase}message/sendText/${instanceName}`
+        const evoEndpoint = `${apiBase}message/sendText/${targetInstance}`
 
-        console.info(`[Webhook] Processing session ${sessionId}`)
+        console.info(`[Webhook] Processing session ${sessionId} on instance ${targetInstance}`)
         console.info(`[Webhook] Using Token: ${evoToken?.substring(0, 5)}... | Endpoint: ${evoEndpoint}`)
 
         const provider = sucursal.llm_provider || configIa.default_provider || 'openai'
@@ -222,7 +231,7 @@ export async function POST(req: Request) {
                 anthropicKey,
                 groqKey,
                 // Passing auth variables so the Debouncer can reply async
-                ...( { evoToken, evoEndpoint, apiBase, instanceName } as any)
+                ...( { evoToken, evoEndpoint, apiBase, instanceName: targetInstance } as any)
             }
         })
 
