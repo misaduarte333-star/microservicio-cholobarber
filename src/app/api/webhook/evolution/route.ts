@@ -175,6 +175,17 @@ export async function POST(req: Request) {
             return NextResponse.json({ received: true, action: 'agent_inactive' })
         }
 
+        // --- VALIDACIÓN DE NÚMEROS BLOQUEADOS ---
+        if (!isFromMe && sucursal.blocked_phones?.length > 0) {
+            const isBlocked = sucursal.blocked_phones.some((blocked: string) => 
+                senderPhone.includes(blocked) || blocked.includes(senderPhone)
+            )
+            if (isBlocked) {
+                console.info(`[Webhook] Número ${senderPhone} está bloqueado para ${sucursal.nombre}. Ignorando.`)
+                return NextResponse.json({ received: true, action: 'phone_blocked' })
+            }
+        }
+
         // --- CONFIGURACIÓN GLOBAL Y CREDENCIALES ---
         const { data: configIa, error: globalError } = await supabase
             .from('configuracion_ia_global')

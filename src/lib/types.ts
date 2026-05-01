@@ -69,6 +69,7 @@ export interface Sucursal {
     minutos_tardanza_mensaje: number
     intervention_pause_enabled: boolean
     intervention_pause_duration: number
+    blocked_phones: string[] | null
 }
 
 

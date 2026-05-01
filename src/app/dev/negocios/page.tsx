@@ -50,8 +50,12 @@ export default function GestorNegocios() {
         minutos_tardanza_mensaje: 15,
         // Pausa por intervencion
         intervention_pause_enabled: true,
-        intervention_pause_duration: 60
+        intervention_pause_duration: 60,
+        // Números bloqueados
+        blocked_phones: [] as string[]
     })
+
+    const [newBlockedPhone, setNewBlockedPhone] = useState('')
 
     const [testConnLoading, setTestConnLoading] = useState(false)
     const [testConnResult, setTestConnResult] = useState<{success: boolean, msg: string} | null>(null)
@@ -133,7 +137,8 @@ export default function GestorNegocios() {
                 minutos_antes_recordatorio: form.minutos_antes_recordatorio,
                 minutos_tardanza_mensaje: form.minutos_tardanza_mensaje,
                 intervention_pause_enabled: form.intervention_pause_enabled,
-                intervention_pause_duration: form.intervention_pause_duration
+                intervention_pause_duration: form.intervention_pause_duration,
+                blocked_phones: form.blocked_phones
             }
 
             if (isEditing) {
@@ -176,7 +181,8 @@ export default function GestorNegocios() {
                 minutos_antes_recordatorio: 15,
                 minutos_tardanza_mensaje: 15,
                 intervention_pause_enabled: true,
-                intervention_pause_duration: 60
+                intervention_pause_duration: 60,
+                blocked_phones: [] as string[]
             })
             setIsCreating(false)
             setEditingId(null)
@@ -210,7 +216,8 @@ export default function GestorNegocios() {
             minutos_antes_recordatorio: s.minutos_antes_recordatorio || 15,
             minutos_tardanza_mensaje: s.minutos_tardanza_mensaje || 15,
             intervention_pause_enabled: s.intervention_pause_enabled !== undefined ? s.intervention_pause_enabled : true,
-            intervention_pause_duration: s.intervention_pause_duration || 60
+            intervention_pause_duration: s.intervention_pause_duration || 60,
+            blocked_phones: s.blocked_phones || []
         })
         setEditingId(s.id)
         setIsCreating(true)
@@ -764,7 +771,67 @@ export default function GestorNegocios() {
                                     </p>
                                 </div>
                             </div>
- 
+
+                            {/* ===== SECCIÓN NÚMEROS BLOQUEADOS ===== */}
+                            <div className="pt-6 border-t border-slate-700/50">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-sm font-bold text-red-400 uppercase tracking-wider">Números Bloqueados</h3>
+                                    <span className="text-[10px] text-slate-500 bg-slate-800 px-2 py-0.5 rounded">{form.blocked_phones.length} número{form.blocked_phones.length !== 1 ? 's' : ''}</span>
+                                </div>
+                                <p className="text-[11px] text-slate-500 mb-3 italic">El agente IA ignorará permanentemente los mensajes de estos números.</p>
+
+                                <div className="flex gap-2 mb-3">
+                                    <input
+                                        type="text"
+                                        value={newBlockedPhone}
+                                        onChange={(e) => setNewBlockedPhone(e.target.value.replace(/\D/g, ''))}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault()
+                                                const phone = newBlockedPhone.trim()
+                                                if (phone && !form.blocked_phones.includes(phone)) {
+                                                    setForm({ ...form, blocked_phones: [...form.blocked_phones, phone] })
+                                                    setNewBlockedPhone('')
+                                                }
+                                            }
+                                        }}
+                                        placeholder="Ej: 5216621234567 (solo números)"
+                                        className="input-field flex-1 bg-slate-900 border-slate-700 font-mono text-sm"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const phone = newBlockedPhone.trim()
+                                            if (phone && !form.blocked_phones.includes(phone)) {
+                                                setForm({ ...form, blocked_phones: [...form.blocked_phones, phone] })
+                                                setNewBlockedPhone('')
+                                            }
+                                        }}
+                                        className="px-4 py-2 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition text-sm font-bold"
+                                    >
+                                        + Añadir
+                                    </button>
+                                </div>
+
+                                {form.blocked_phones.length > 0 && (
+                                    <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                                        {form.blocked_phones.map((phone) => (
+                                            <div key={phone} className="flex items-center justify-between bg-red-500/5 border border-red-500/10 rounded-lg px-3 py-1.5">
+                                                <span className="font-mono text-xs text-slate-300">{phone}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setForm({ ...form, blocked_phones: form.blocked_phones.filter(p => p !== phone) })}
+                                                    className="text-red-400 hover:text-red-300 text-lg leading-none ml-3"
+                                                    title="Eliminar"
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="flex justify-end gap-3 pt-4">
                                 <button
                                     type="button"
