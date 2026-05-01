@@ -169,6 +169,8 @@ export class AgentService {
 
             const result = await agent.invoke({
                 messages: messages,
+            }, {
+                recursionLimit: 50 // Límite de pasos aumentado para evitar GRAPH_RECURSION_LIMIT
             })
 
             // 6.5 VALIDAR COMPLIANCE DE TOOLS (Enforcement) - MODO ESTRICTO
