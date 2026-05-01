@@ -43,19 +43,19 @@ export const makeValidarHoraTool = (sucursalId: string, timezone: string = 'Amer
                 }
 
                 if (!hora) {
-                    return JSON.stringify({ 
-                        status: 'error', 
-                        message: 'Falta la hora_solicitada', 
+                    return JSON.stringify({
+                        status: 'error',
+                        message: 'Falta la hora_solicitada',
                         instruccion_para_agente: 'No puedes validar disponibilidad sin saber la hora. ¡NO asumas que el negocio está cerrado ni respondas cosas como "A esa hora ya cerramos"! Pregúntale al cliente "¿A qué hora te gustaría tu cita?" o usa DISPONIBILIDAD_HOY para ver todo el día.',
-                        input_recibido: { hora_solicitada, fecha, slot_inicio } 
+                        input_recibido: { hora_solicitada, fecha, slot_inicio }
                     })
                 }
 
                 // Obtener fecha y hora actual en la zona horaria de la sucursal
                 const now = new Date()
-                const todayStr = formatInTimeZone(now, tz, 'yyyy-MM-dd')
-                const hora_actual = formatInTimeZone(now, tz, 'HH:mm')
-                
+                const todayStr = formatInTimeZone(now, timezone, 'yyyy-MM-dd')
+                const hora_actual = formatInTimeZone(now, timezone, 'HH:mm')
+
                 if (!fechaStr) fechaStr = todayStr
 
                 // 1. Validar fechas en el PASADO
@@ -88,10 +88,10 @@ export const makeValidarHoraTool = (sucursalId: string, timezone: string = 'Amer
                 // Usamos un formato que preserve la intención de la fecha local
                 const [y, m, d] = fechaStr.split('-').map(Number)
                 const requestedDate = new Date(y, m - 1, d, 12, 0, 0)
-                
+
                 let config = undefined
                 if (sucursalData?.horario_apertura) {
-                    const dayName = formatInTimeZone(requestedDate, tz, 'eeee').toLowerCase()
+                    const dayName = formatInTimeZone(requestedDate, timezone, 'eeee').toLowerCase()
                     const dayMap: any = {
                         'monday': 'lunes', 'tuesday': 'martes', 'wednesday': 'miercoles',
                         'thursday': 'jueves', 'friday': 'viernes', 'saturday': 'sabado', 'sunday': 'domingo'
@@ -152,7 +152,7 @@ export const makeValidarHoraTool = (sucursalId: string, timezone: string = 'Amer
                 }
 
                 // 3. Si la fecha es HOY, usar la lógica completa de TimeValidator (comparando vs hora actual)
-                console.log('[VALIDAR_HORA] timezone:', tz, 'hora_actual:', hora_actual, 'hora_solicitada:', hora, 'parsed:', TimeValidator.parseHoraPublic(hora))
+                console.log('[VALIDAR_HORA] timezone:', timezone, 'hora_actual:', hora_actual, 'hora_solicitada:', hora, 'parsed:', TimeValidator.parseHoraPublic(hora))
 
                 const result = TimeValidator.validate({ hora_actual, hora_solicitada: hora }, config)
                 console.log('[VALIDAR_HORA] result:', result)
@@ -212,7 +212,7 @@ function makeDisponibilidadBase(sucursalId: string, toolName: string, descriptio
 
                 const normalizedInput = `${resolvedFecha}T${timePart}:00`
 
-                console.log(`[IA_DIAGNOSTIC] Slot: ${resolvedFecha} ${resolvedHora} -> Normalized: ${normalizedInput} (TZ: ${timezone})`)
+                console.log(`[IA_DIAGNOSTIC] Slot: ${resolvedFecha} ${resolvedHora} -> Normalized: ${normalizedInput} (timezone: ${timezone})`)
 
                 const dateStart = toDate(normalizedInput, { timeZone: timezone })
 
@@ -243,7 +243,7 @@ function makeDisponibilidadBase(sucursalId: string, toolName: string, descriptio
                 // Determinar duración del slot según configuración de la sucursal
                 const slotBookingMode = (sucursalData?.slot_booking_mode || 'by_service') as 'fixed_30min' | 'fixed_1hour' | 'by_service'
                 const slotDurationMinutes = getSlotDuration(slotBookingMode, 30) // 30 min es default para DISPONIBILIDAD
-                
+
                 console.log(`[IA_DIAGNOSTIC] Slot booking mode: ${slotBookingMode}, duration: ${slotDurationMinutes} min`)
 
                 // AHORA calcular dateEnd con la duración correcta
@@ -327,7 +327,7 @@ function makeDisponibilidadBase(sucursalId: string, toolName: string, descriptio
                         motivo = `No trabaja los ${dayName}s`
                     } else {
                         const slotTime = formatInTimeZone(dateStart, timezone, 'HH:mm')
-                        
+
                         // Filtrar sus propias citas y bloqueos
                         const misCitas = (citasFuturas ?? []).filter((c: any) => c.barbero_id === b.id)
                         const misBloqueos = (bloqueosFuturos ?? []).filter((bl: any) => bl.barbero_id === b.id)
@@ -349,19 +349,19 @@ function makeDisponibilidadBase(sucursalId: string, toolName: string, descriptio
                         // Verificar slot actual
                         if (checkCollision(dateStart, dateEnd, slotTime)) {
                             estado = 'ocupado'
-                            
+
                             if (slotTime < workingHours.inicio || slotTime >= workingHours.fin) {
                                 motivo = `Fuera de su turno (${workingHours.inicio} - ${workingHours.fin})`
                             } else if (b.bloqueo_almuerzo && slotTime >= b.bloqueo_almuerzo.inicio && slotTime < b.bloqueo_almuerzo.fin) {
                                 motivo = `En descanso/almuerzo (${b.bloqueo_almuerzo.inicio} - ${b.bloqueo_almuerzo.fin})`
                             } else {
                                 motivo = 'Cita o bloqueo personal'
-                                
+
                                 // Buscar el proximo slot libre en bloques de la duración configurada hasta el fin del turno
                                 let nextStart = addMinutes(dateStart, slotDurationMinutes)
                                 let nextEnd = addMinutes(nextStart, slotDurationMinutes)
                                 let nextHhmm = formatInTimeZone(nextStart, timezone, 'HH:mm')
-                                
+
                                 while (nextHhmm < workingHours.fin) {
                                     if (!checkCollision(nextStart, nextEnd, nextHhmm)) {
                                         // Encontramos un hueco!
