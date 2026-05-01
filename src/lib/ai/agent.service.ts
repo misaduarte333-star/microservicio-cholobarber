@@ -158,7 +158,7 @@ export class AgentService {
             // 6. Ejecutar el grafo con el historial previo
             const messages = [
                 new SystemMessage(finalSystemPrompt),
-                ...previousMessages,
+                ...previousMessages.slice(-10), // Limit history to last 10 messages
                 new HumanMessage(input),
             ]
 
