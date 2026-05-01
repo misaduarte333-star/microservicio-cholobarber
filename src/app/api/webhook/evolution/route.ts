@@ -167,7 +167,16 @@ export async function POST(req: Request) {
         // --- LÓGICA DE MODO MANUAL / INTERVENCIÓN ---
         // 1. Si el mensaje lo envió el barbero (fromMe), activar modo manual
         if (isFromMe) {
-            console.info(`[Webhook] Intervención detectada en ${instanceName}. Pausando agente para ${senderPhone}.`)
+            // EVITAR AUTO-PAUSA: Si el mensaje fue enviado por el bot (vía API), no pausamos.
+            // Los mensajes de la API suelen tener source 'unknown' o carecer de ciertos metadatos de dispositivo.
+            const source = payload.source || 'unknown';
+            
+            if (source === 'api' || source === 'unknown') {
+                console.info(`[Webhook] Mensaje de salida detectado (Bot). No se requiere acción.`);
+                return NextResponse.json({ received: true });
+            }
+
+            console.info(`[Webhook] Intervención HUMANA detectada en ${instanceName} (Source: ${source}). Pausando agente para ${senderPhone}.`)
             await debouncerService.setManualMode(sucursal.id, senderPhone, true)
             return NextResponse.json({ received: true, mode: 'manual_activated' })
         }
