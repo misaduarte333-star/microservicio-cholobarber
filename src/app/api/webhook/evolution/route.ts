@@ -87,15 +87,47 @@ export async function POST(req: Request) {
 
         console.info(`[Webhook] remoteJid: ${remoteJid} | senderPhone: ${senderPhone} | fromMe: ${isFromMe}`)
         const messageType = payload.data.messageType
-        
+        // --- CONFIGURACIÓN GLOBAL (Requerida temprano para descargar audios) ---
+        const { data: configIa, error: globalError } = await supabase
+            .from('configuracion_ia_global')
+            .select('*')
+            .eq('id', 1)
+            .single()
+
+        const apiBaseGlobal = configIa?.evolution_api_url?.endsWith('/') ? configIa.evolution_api_url : `${configIa?.evolution_api_url}/`
+        const evoTokenGlobal = configIa?.evolution_api_key
+
         let messageText = ''
         if (messageType === 'conversation' || messageType === 'extendedTextMessage') {
             messageText = payload.data.message?.conversation || payload.data.message?.extendedTextMessage?.text
         } else if (messageType === 'audioMessage') {
-            const base64Audio = payload.data.message?.base64 || payload.data.message?.audioMessage?.base64
+            let base64Audio = payload.data.message?.base64 || payload.data.message?.audioMessage?.base64 || payload.data.base64
+            
+            // Si el webhook no trajo base64 por defecto, lo descargamos manualmente
+            if (!base64Audio && apiBaseGlobal && evoTokenGlobal && payload.data.message) {
+                try {
+                    console.info(`[Webhook] Descargando base64 del audio desde Evolution API para instancia: ${rawInstanceName}...`)
+                    const res = await fetch(`${apiBaseGlobal}chat/getBase64FromMediaMessage/${rawInstanceName}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'apikey': evoTokenGlobal },
+                        body: JSON.stringify({ message: payload.data })
+                    })
+                    if (res.ok) {
+                        const mediaData = await res.json()
+                        base64Audio = mediaData.base64
+                    } else {
+                        console.error('[Webhook] Error descargando audio:', await res.text())
+                    }
+                } catch (err: any) {
+                    console.error('[Webhook] Excepción descargando audio:', err.message)
+                }
+            }
+
             if (base64Audio) {
                 const { AudioTranscriberService } = await import('@/lib/ai/audio.service')
                 messageText = await AudioTranscriberService.transcribe(base64Audio)
+            } else {
+                console.warn('[Webhook] No se pudo obtener el base64 del audio. El mensaje será ignorado.')
             }
         }
 
@@ -209,20 +241,14 @@ export async function POST(req: Request) {
             }
         }
 
-        // --- CONFIGURACIÓN GLOBAL Y CREDENCIALES ---
-        const { data: configIa, error: globalError } = await supabase
-            .from('configuracion_ia_global')
-            .select('*')
-            .eq('id', 1)
-            .single()
-
-        if (globalError || !configIa || !configIa.evolution_api_url) {
+        // --- CREDENCIALES FINALES ---
+        if (globalError || !configIa || !apiBaseGlobal) {
             console.error('[Webhook] Configuración global de IA incompleta (Falta Evolution URL).')
             return NextResponse.json({ received: true })
         }
 
-        const apiBase = configIa.evolution_api_url.endsWith('/') ? configIa.evolution_api_url : `${configIa.evolution_api_url}/`
-        const evoToken = sucursal.agent_evolution_key || configIa.evolution_api_key
+        const apiBase = apiBaseGlobal
+        const evoToken = sucursal.agent_evolution_key || evoTokenGlobal
 
         // --- LÓGICA DE MODO MANUAL / INTERVENCIÓN ---
         // 1. Si el mensaje lo envió el barbero (fromMe), activar modo manual
