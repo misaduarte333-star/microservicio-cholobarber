@@ -105,7 +105,16 @@ export class DebouncerService {
         try {
             const key = `${this.MANUAL_MODE_PREFIX}${sucursalId}:${phone}`
             const val = await redis.get(key)
-            return val === 'true'
+            if (val === 'true') return true
+            
+            // Si no se encontró, buscar si su alias tiene la pausa activa
+            const alias = await redis.get(`jid_alias:${phone}`)
+            if (alias) {
+                const aliasKey = `${this.MANUAL_MODE_PREFIX}${sucursalId}:${alias}`
+                const aliasVal = await redis.get(aliasKey)
+                return aliasVal === 'true'
+            }
+            return false
         } catch {
             return false
         }

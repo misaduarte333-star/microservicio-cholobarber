@@ -53,13 +53,24 @@ export async function POST(req: Request) {
             return NextResponse.json({ received: true })
         }
 
-        const remoteJid = rawRemoteJid
+        let remoteJid = rawRemoteJid
         const isFromMe = !!payload.data.key.fromMe
 
+        // --- MAPEO LID ↔ JID (Traducción en tiempo real) ---
+        // Si el mensaje es saliente y es un LID, intentamos recuperar su JID real (número) de Redis
+        if (isFromMe && remoteJid.includes('@lid') && redis.status === 'ready') {
+            try {
+                const alias = await redis.get(`jid_alias:${remoteJid}`)
+                if (alias) {
+                    remoteJid = alias // Usar el número real en vez del LID!
+                    console.info(`[Webhook] LID traducido a JID real: ${rawRemoteJid} -> ${remoteJid}`)
+                }
+            } catch {}
+        }
+
         // Para el contexto de IA (historial, herramientas) necesitamos un número limpio.
-        // senderPn trae el número real incluso cuando remoteJid es un LID (@lid).
         const senderPn = payload.data.key.senderPn
-        const phoneSource = senderPn || rawRemoteJid
+        const phoneSource = senderPn || remoteJid // Usar remoteJid ya traducido
         const senderPhone = (phoneSource.split('@')[0] || '').split(':')[0]
 
         // --- MAPEO LID ↔ JID (solo guardado, sin complejidad) ---
@@ -218,12 +229,22 @@ export async function POST(req: Request) {
         if (isFromMe) {
             // EVITAR AUTO-PAUSA: Verificamos si hay un bloqueo de bot en Redis para este chat
             const botLockKey = `bot_sending:${remoteJid}`
-            const isBotMessage = await redis.get(botLockKey)
+            let isBotMessage = await redis.get(botLockKey)
+            
+            // Si no está, buscar en el alias por si se guardó con el otro ID
+            if (!isBotMessage) {
+                const alias = await redis.get(`jid_alias:${remoteJid}`)
+                if (alias) {
+                    isBotMessage = await redis.get(`bot_sending:${alias}`)
+                    if (isBotMessage) await redis.del(`bot_sending:${alias}`)
+                }
+            } else {
+                // Consumir el bloqueo original
+                await redis.del(botLockKey)
+            }
 
             if (isBotMessage) {
                 console.info(`[Webhook] Mensaje de salida detectado (Confirmado Bot via Redis). No se requiere acción.`)
-                // Consumir el bloqueo para no interferir con el siguiente mensaje si ocurre rápido
-                await redis.del(botLockKey)
                 return NextResponse.json({ received: true })
             }
 
