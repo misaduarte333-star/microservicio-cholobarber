@@ -59,7 +59,35 @@ export async function POST(req: Request) {
         }
 
         const remoteJid = rawRemoteJid
-        const senderPhone = (bestIdentifier.split('@')[0] || '').split(':')[0]
+        let senderPhone = (bestIdentifier.split('@')[0] || '').split(':')[0]
+ 
+        // --- MAPEADOR DE LIDs (Para Meta/WhatsApp Business API) ---
+        // Si recibimos un mensaje que trae el número real y una referencia al LID anterior, los guardamos en Redis.
+        // Esto permite que cuando el barbero responda (y Evolution use el LID), sepamos a qué número pausar.
+        const previousLid = payload.data.key.previousRemoteJid?.split('@')[0]
+        if (!isFromMe && previousLid && senderPhone) {
+            try {
+                await redis.set(`lid_map:${previousLid}`, senderPhone, 'EX', 604800) // Guardar por 7 días
+                console.info(`[Webhook] Mapeo LID guardado: ${previousLid} -> ${senderPhone}`)
+            } catch (e) {
+                console.warn('[Webhook] Error guardando mapeo LID:', e)
+            }
+        }
+ 
+        // Si el mensaje es de salida y es un LID, intentamos recuperar el teléfono real para la pausa
+        if (isFromMe && bestIdentifier.includes('@lid')) {
+            const lidClean = bestIdentifier.split('@')[0]
+            try {
+                const mappedPhone = await redis.get(`lid_map:${lidClean}`)
+                if (mappedPhone) {
+                    console.info(`[Webhook] Mapeo LID encontrado: ${lidClean} -> ${mappedPhone}`)
+                    senderPhone = mappedPhone
+                }
+            } catch (e) {
+                console.warn('[Webhook] Error recuperando mapeo LID:', e)
+            }
+        }
+        // --- FIN MAPEADOR LIDs ---
         const messageType = payload.data.messageType
         
         let messageText = ''
