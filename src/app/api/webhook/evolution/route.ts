@@ -44,51 +44,25 @@ export async function POST(req: Request) {
         console.info(`[Webhook] Processing event for instance: "${rawInstanceName}" (normalized: "${instanceName}")`)
 
         // 2. Extraer datos del mensaje
-        // Intentamos obtener el número real desde senderPn o remoteJid (evitando LIDs si es posible)
+        // El 'remoteJid' es el identificador ESTABLE del chat (mismo para msgs entrantes y salientes).
+        // Lo usamos como clave de pausa: garantiza consistencia sin importar LIDs.
         const rawRemoteJid = payload.data.key.remoteJid
-        const rawSenderPn = payload.data.key.senderPn
-        
-        // Si el remoteJid es un LID, intentamos usar senderPn que suele traer el número real
-        const bestIdentifier = (rawRemoteJid?.includes('@lid') && rawSenderPn) 
-            ? rawSenderPn 
-            : (rawRemoteJid || '')
 
-        if (!bestIdentifier || bestIdentifier.includes('@g.us')) {
-            console.info(`[Webhook] Ignorando mensaje de grupo o inválido: ${bestIdentifier}`)
+        if (!rawRemoteJid || rawRemoteJid.includes('@g.us')) {
+            console.info(`[Webhook] Ignorando mensaje de grupo o inválido: ${rawRemoteJid}`)
             return NextResponse.json({ received: true })
         }
 
         const remoteJid = rawRemoteJid
-        let senderPhone = (bestIdentifier.split('@')[0] || '').split(':')[0]
         const isFromMe = !!payload.data.key.fromMe
- 
-        // --- MAPEADOR DE LIDs (Para Meta/WhatsApp Business API) ---
-        // Si recibimos un mensaje que trae el número real y una referencia al LID anterior, los guardamos en Redis.
-        // Esto permite que cuando el barbero responda (y Evolution use el LID), sepamos a qué número pausar.
-        const previousLid = payload.data.key.previousRemoteJid?.split('@')[0]
-        if (!isFromMe && previousLid && senderPhone) {
-            try {
-                await redis.set(`lid_map:${previousLid}`, senderPhone, 'EX', 604800) // Guardar por 7 días
-                console.info(`[Webhook] Mapeo LID guardado: ${previousLid} -> ${senderPhone}`)
-            } catch (e) {
-                console.warn('[Webhook] Error guardando mapeo LID:', e)
-            }
-        }
- 
-        // Si el mensaje es de salida y es un LID, intentamos recuperar el teléfono real para la pausa
-        if (isFromMe && bestIdentifier.includes('@lid')) {
-            const lidClean = bestIdentifier.split('@')[0]
-            try {
-                const mappedPhone = await redis.get(`lid_map:${lidClean}`)
-                if (mappedPhone) {
-                    console.info(`[Webhook] Mapeo LID encontrado: ${lidClean} -> ${mappedPhone}`)
-                    senderPhone = mappedPhone
-                }
-            } catch (e) {
-                console.warn('[Webhook] Error recuperando mapeo LID:', e)
-            }
-        }
-        // --- FIN MAPEADOR LIDs ---
+
+        // Para el contexto de IA (historial, herramientas) necesitamos un número limpio.
+        // senderPn trae el número real incluso cuando remoteJid es un LID (@lid).
+        const senderPn = payload.data.key.senderPn
+        const phoneSource = senderPn || rawRemoteJid
+        const senderPhone = (phoneSource.split('@')[0] || '').split(':')[0]
+
+        console.info(`[Webhook] remoteJid: ${remoteJid} | senderPhone: ${senderPhone} | fromMe: ${isFromMe}`)
         const messageType = payload.data.messageType
         
         let messageText = ''
@@ -231,10 +205,11 @@ export async function POST(req: Request) {
             }
 
             // Si la pausa por intervención está habilitada, pausamos por el tiempo configurado
+            // Usamos remoteJid como clave del chat: es consistente entre msgs entrantes y salientes
             if (sucursal.intervention_pause_enabled !== false) {
                 const duration = sucursal.intervention_pause_duration || 60
-                console.info(`[Webhook] Intervención HUMANA detectada en ${instanceName}. Pausando agente para ${senderPhone} por ${duration} minutos.`)
-                await debouncerService.setManualMode(sucursal.id, senderPhone, true, duration)
+                console.info(`[Webhook] Intervención HUMANA detectada en ${instanceName}. Pausando agente para chat ${remoteJid} por ${duration} minutos.`)
+                await debouncerService.setManualMode(sucursal.id, remoteJid, true, duration)
             } else {
                 console.info(`[Webhook] Intervención HUMANA detectada en ${instanceName}, pero la pausa automática está deshabilitada.`)
             }
@@ -242,18 +217,18 @@ export async function POST(req: Request) {
             return NextResponse.json({ received: true, mode: 'manual_activated' })
         }
 
-        // 2. Si el barbero quiere reactivar manualmente
+        // 2. Si el cliente escribe para reactivar el agente manualmente
         if (cleanMessageText === 'activar' || cleanMessageText === 'activar agente' || cleanMessageText === 'reactivar bot' || cleanMessageText === '/activar') {
-            console.info(`[Webhook] Reactivando agente para ${senderPhone} manualmente.`)
-            await debouncerService.setManualMode(sucursal.id, senderPhone, false)
+            console.info(`[Webhook] Reactivando agente para chat ${remoteJid} manualmente.`)
+            await debouncerService.setManualMode(sucursal.id, remoteJid, false)
             
             return NextResponse.json({ received: true, action: 'agent_reactivated' })
         }
 
-        // 3. Verificar si estamos en modo manual
-        const isManual = await debouncerService.getManualMode(sucursal.id, senderPhone)
+        // 3. Verificar si estamos en modo manual (usando remoteJid como clave del chat)
+        const isManual = await debouncerService.getManualMode(sucursal.id, remoteJid)
         if (isManual) {
-            console.info(`[Webhook] Agente pausado para ${senderPhone}. Ignorando mensaje.`)
+            console.info(`[Webhook] Agente pausado para chat ${remoteJid}. Ignorando mensaje de ${senderPhone}.`)
             return NextResponse.json({ received: true, ignored: 'manual_mode_active' })
         }
         // --- FIN LÓGICA MODO MANUAL ---
