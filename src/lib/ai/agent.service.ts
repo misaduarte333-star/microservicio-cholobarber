@@ -85,6 +85,7 @@ export class AgentService {
             timezone: ctx.timezone,
             customPrompt: ctx.customPrompt || undefined,
             identifiedClient: clienteRes?.data || undefined,
+            clientNotFound: !clienteRes?.data,
             businessCatalog: businessCatalogStr,
             tipoPrestadorLabel: ctx.tipoPrestadorLabel || 'Barbero',
             horarioApertura: sucursalRes?.data?.horario_apertura
