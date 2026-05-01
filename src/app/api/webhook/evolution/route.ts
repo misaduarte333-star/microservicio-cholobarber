@@ -37,10 +37,11 @@ export async function POST(req: Request) {
         // 1. Resolver instancia
         const rawInstanceName = payload.instance
         if (!rawInstanceName) {
-            console.warn('[Webhook] No instance name attached.')
+            console.warn('[Webhook] No instance name attached in payload:', JSON.stringify(payload).substring(0, 200))
             return NextResponse.json({ received: true })
         }
         const instanceName = rawInstanceName.toLowerCase()
+        console.info(`[Webhook] Processing event for instance: "${rawInstanceName}" (normalized: "${instanceName}")`)
 
         // 2. Extraer datos del mensaje
         const remoteJid = payload.data.key.remoteJid
@@ -76,7 +77,7 @@ export async function POST(req: Request) {
         let sucursal: any = null
 
         // --- LÓGICA DE RUTEO POR INSTANCIA ---
-        if (instanceName === 'cholobarber' || instanceName === 'cholobarber_v2') {
+        if (instanceName === 'cholobarber' || instanceName === 'cholobarber_v2' || instanceName === 'cholo_barber') {
             // Instancia EXCLUSIVA de producción: Cholo Barber
             const { data } = await supabase.from('sucursales').select('*').eq('id', CHOLO_BARBER_ID).single()
             sucursal = data
@@ -140,9 +141,14 @@ export async function POST(req: Request) {
         }
 
         if (!sucursal) {
-            console.warn(`[Webhook] Instancia ${rawInstanceName} no configurada, deshabilitada o agente inactivo para sesión ${senderPhone}.`)
+            console.warn(`[Webhook] ERROR: No se encontró sucursal para instancia "${rawInstanceName}". Verifique agent_instance_name en la DB o si el ID hardcodeado es correcto.`)
+            // Listar opciones para diagnóstico en logs
+            const { data: options } = await supabase.from('sucursales').select('nombre, agent_instance_name').eq('agent_enabled', true)
+            console.info('[Webhook] Instancias configuradas en DB:', options?.map(o => `${o.nombre}: ${o.agent_instance_name}`).join(', '))
             return NextResponse.json({ received: true })
         }
+
+        console.info(`[Webhook] Sucursal detectada: ${sucursal.nombre} (ID: ${sucursal.id})`)
 
         // Definir el nombre real de la instancia para usar en endpoints de Evolution
         // Si estamos en modo pruebas, usamos el nombre del webhook ('pruebas' o 'barberia')
