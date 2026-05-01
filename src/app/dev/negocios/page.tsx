@@ -62,6 +62,34 @@ export default function GestorNegocios() {
     
     const [cardTests, setCardTests] = useState<Record<string, { loading: boolean, status: 'success' | 'error' | null, msg: string }>>({})
     const [appOrigin, setAppOrigin] = useState('')
+    const [pausedChats, setPausedChats] = useState<Record<string, Array<{ chatId: string, ttlSeconds: number }>>>({})
+
+    const fetchPausedChats = async (sucursalId: string) => {
+        try {
+            const res = await fetch(`/api/dev/paused-chats?sucursalId=${sucursalId}`)
+            const data = await res.json()
+            if (res.ok) {
+                setPausedChats(prev => ({ ...prev, [sucursalId]: data.paused || [] }))
+            }
+        } catch {}
+    }
+
+    const deactivatePause = async (sucursalId: string, chatId: string) => {
+        try {
+            await fetch('/api/dev/paused-chats', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sucursalId, chatId })
+            })
+            // Actualizar localmente
+            setPausedChats(prev => ({
+                ...prev,
+                [sucursalId]: (prev[sucursalId] || []).filter(c => c.chatId !== chatId)
+            }))
+        } catch (err) {
+            alert('Error al desactivar la pausa: ' + err)
+        }
+    }
 
     const checkAllConnections = async (list: SucursalConStats[]) => {
         list.forEach(async (s) => {
@@ -97,6 +125,7 @@ export default function GestorNegocios() {
             if (!res.ok) throw new Error(data.error)
             setSucursales(data.sucursales || [])
             checkAllConnections(data.sucursales || [])
+            ;(data.sucursales || []).forEach((s: any) => fetchPausedChats(s.id))
         } catch (err) {
             setError(formatError(err))
         } finally {
@@ -110,6 +139,25 @@ export default function GestorNegocios() {
             setAppOrigin(window.location.origin)
         }
     }, [])
+
+    // Recargar pausas cada 15 s y hacer countdown cada 1 s
+    useEffect(() => {
+        const pollInterval = setInterval(() => {
+            sucursales.forEach(s => fetchPausedChats(s.id))
+        }, 15000)
+        const tickInterval = setInterval(() => {
+            setPausedChats(prev => {
+                const next = { ...prev }
+                Object.keys(next).forEach(sid => {
+                    next[sid] = next[sid]
+                        .map(c => ({ ...c, ttlSeconds: Math.max(0, c.ttlSeconds - 1) }))
+                        .filter(c => c.ttlSeconds > 0)
+                })
+                return next
+            })
+        }, 1000)
+        return () => { clearInterval(pollInterval); clearInterval(tickInterval) }
+    }, [sucursales])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -1023,6 +1071,47 @@ export default function GestorNegocios() {
                                     </code>
                                 </div>
                             </div>
+
+                            {/* ===== PANEL CHATS PAUSADOS ===== */}
+                            {(pausedChats[s.id] || []).length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-amber-500/20">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                                            ⏸ Chats Pausados
+                                        </span>
+                                        <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                                            {(pausedChats[s.id] || []).length}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                                        {(pausedChats[s.id] || []).map(chat => {
+                                            const mins = Math.floor(chat.ttlSeconds / 60)
+                                            const secs = chat.ttlSeconds % 60
+                                            const label = mins > 0
+                                                ? `${mins}m ${secs.toString().padStart(2, '0')}s`
+                                                : `${secs}s`
+                                            const shortId = chat.chatId.length > 22
+                                                ? chat.chatId.substring(0, 22) + '…'
+                                                : chat.chatId
+                                            return (
+                                                <div key={chat.chatId} className="flex items-center justify-between bg-amber-500/5 border border-amber-500/10 rounded-lg px-2 py-1">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-mono text-[10px] text-slate-300">{shortId}</span>
+                                                        <span className="text-[9px] text-amber-400 font-bold tabular-nums">{label} restante</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => deactivatePause(s.id, chat.chatId)}
+                                                        className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition font-bold ml-2 whitespace-nowrap"
+                                                        title="Reactivar agente para este chat"
+                                                    >
+                                                        ▶ Activar
+                                                    </button>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="pt-4 border-t border-slate-700/50 flex gap-2">
                                 <button
