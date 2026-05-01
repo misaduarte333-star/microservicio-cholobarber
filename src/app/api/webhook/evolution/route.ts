@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { AgentService } from '@/lib/ai/agent.service'
-import { debouncerService } from '@/lib/ai/debouncer.service'
+import { debouncerService, redis } from '@/lib/ai/debouncer.service'
 import { EvolutionService } from '@/lib/evolution.service'
 
 
@@ -182,16 +182,18 @@ export async function POST(req: Request) {
         // --- LÓGICA DE MODO MANUAL / INTERVENCIÓN ---
         // 1. Si el mensaje lo envió el barbero (fromMe), activar modo manual
         if (isFromMe) {
-            // EVITAR AUTO-PAUSA: Si el mensaje fue enviado por el bot (vía API), no pausamos.
-            // Los mensajes de la API suelen tener source 'unknown' o carecer de ciertos metadatos de dispositivo.
-            const source = payload.source || 'unknown';
-            
-            if (source === 'api' || source === 'unknown') {
-                console.info(`[Webhook] Mensaje de salida detectado (Bot). No se requiere acción.`);
-                return NextResponse.json({ received: true });
+            // EVITAR AUTO-PAUSA: Verificamos si hay un bloqueo de bot en Redis para este chat
+            const botLockKey = `bot_sending:${remoteJid}`
+            const isBotMessage = await redis.get(botLockKey)
+
+            if (isBotMessage) {
+                console.info(`[Webhook] Mensaje de salida detectado (Confirmado Bot via Redis). No se requiere acción.`)
+                // Consumir el bloqueo para no interferir con el siguiente mensaje si ocurre rápido
+                await redis.del(botLockKey)
+                return NextResponse.json({ received: true })
             }
 
-            console.info(`[Webhook] Intervención HUMANA detectada en ${instanceName} (Source: ${source}). Pausando agente para ${senderPhone}.`)
+            console.info(`[Webhook] Intervención HUMANA detectada en ${instanceName}. Pausando agente para ${senderPhone}.`)
             await debouncerService.setManualMode(sucursal.id, senderPhone, true)
             
             // Notificar en el chat que el agente se ha pausado

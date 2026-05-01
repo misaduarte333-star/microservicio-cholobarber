@@ -291,6 +291,16 @@ export class DebouncerService {
                 console.error(`[Evolution API Error] sendText failed. Status: ${res.status}, Body: ${errText}`);
                 return false;
             }
+
+            // Marcar que el bot envió este mensaje para evitar auto-pausa
+            try {
+                if (redis.status === 'ready') {
+                    await redis.set(`bot_sending:${jid}`, 'true', 'EX', 15)
+                }
+            } catch (e) {
+                console.error('[Debouncer] Error setting bot_sending lock:', e)
+            }
+
             return true;
         } catch (error: any) {
             console.error(`[Evolution Net Error] Catch exception sending to Evolution: ${error.message}`);
