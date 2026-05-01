@@ -225,8 +225,6 @@ export async function POST(req: Request) {
         const groqKey = configIa.groq_api_key || process.env.GROQ_API_KEY || ''
 
         const sessionId = `${sucursal.id}:${senderPhone}`
-        const apiBase = configIa.evolution_api_url.endsWith('/') ? configIa.evolution_api_url : `${configIa.evolution_api_url}/`
-        const evoToken = sucursal.agent_evolution_key || configIa.evolution_api_key
         const evoEndpoint = `${apiBase}message/sendText/${targetInstance}`
 
         console.info(`[Webhook] Processing session ${sessionId} on instance ${targetInstance}`)
