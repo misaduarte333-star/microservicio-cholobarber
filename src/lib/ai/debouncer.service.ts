@@ -115,13 +115,13 @@ export class DebouncerService {
      * Activa o desactiva el modo manual para un chat.
      * @param enabled true para pausar el agente, false para activarlo.
      */
-    public async setManualMode(sucursalId: string, phone: string, enabled: boolean): Promise<void> {
+    public async setManualMode(sucursalId: string, phone: string, enabled: boolean, durationMinutes: number = 1440): Promise<void> {
         if (redis.status !== 'ready') return
         try {
             const key = `${this.MANUAL_MODE_PREFIX}${sucursalId}:${phone}`
             if (enabled) {
-                // Modo manual activo por 24 horas
-                await redis.set(key, 'true', 'EX', 86400)
+                // Modo manual activo por la duración especificada
+                await redis.set(key, 'true', 'EX', durationMinutes * 60)
                 // Limpiar buffer inmediatamente si el barbero interviene
                 const listKey = `buffer:${sucursalId}:${phone}`
                 const timerKey = `timer:${sucursalId}:${phone}`

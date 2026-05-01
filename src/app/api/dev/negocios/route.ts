@@ -59,7 +59,8 @@ export async function POST(req: NextRequest) {
             agent_name, agent_personality, agent_instance_name, agent_evolution_key, agent_enabled, agent_active,
             tipo_prestador, tipo_prestador_label,
             llm_provider, llm_model,
-            recordatorios_activos, minutos_antes_recordatorio, minutos_tardanza_mensaje
+            recordatorios_activos, minutos_antes_recordatorio, minutos_tardanza_mensaje,
+            intervention_pause_enabled, intervention_pause_duration
         } = await req.json()
 
         if (!nombre || !slug || !adminEmail || !adminPassword || !telefono_whatsapp) {
@@ -98,7 +99,9 @@ export async function POST(req: NextRequest) {
                     tipo_prestador_label: tipo_prestador_label || 'Barbero',
                     recordatorios_activos: recordatorios_activos || false,
                     minutos_antes_recordatorio: minutos_antes_recordatorio || 15,
-                    minutos_tardanza_mensaje: minutos_tardanza_mensaje || 15
+                    minutos_tardanza_mensaje: minutos_tardanza_mensaje || 15,
+                    intervention_pause_enabled: intervention_pause_enabled !== undefined ? intervention_pause_enabled : true,
+                    intervention_pause_duration: intervention_pause_duration || 60
                 }
             ])
             .select()

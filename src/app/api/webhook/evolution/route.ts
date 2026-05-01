@@ -193,22 +193,22 @@ export async function POST(req: Request) {
                 return NextResponse.json({ received: true })
             }
 
-            console.info(`[Webhook] Intervención HUMANA detectada en ${instanceName}. Pausando agente para ${senderPhone}.`)
-            await debouncerService.setManualMode(sucursal.id, senderPhone, true)
-            
-            // Notificar en el chat que el agente se ha pausado
-            await EvolutionService.sendTextMessage(apiBase, evoToken, targetInstance, remoteJid, '⚠️ *Agente Desconectado* para este chat. Escribe *Activar* para volver a activar.')
+            // Si la pausa por intervención está habilitada, pausamos por el tiempo configurado
+            if (sucursal.intervention_pause_enabled !== false) {
+                const duration = sucursal.intervention_pause_duration || 60
+                console.info(`[Webhook] Intervención HUMANA detectada en ${instanceName}. Pausando agente para ${senderPhone} por ${duration} minutos.`)
+                await debouncerService.setManualMode(sucursal.id, senderPhone, true, duration)
+            } else {
+                console.info(`[Webhook] Intervención HUMANA detectada en ${instanceName}, pero la pausa automática está deshabilitada.`)
+            }
             
             return NextResponse.json({ received: true, mode: 'manual_activated' })
         }
 
-        // 2. Si el cliente quiere reactivar el bot (o el barbero envía el comando)
+        // 2. Si el barbero quiere reactivar manualmente
         if (cleanMessageText === 'activar' || cleanMessageText === 'activar agente' || cleanMessageText === 'reactivar bot' || cleanMessageText === '/activar') {
-            console.info(`[Webhook] Reactivando agente para ${senderPhone}.`)
+            console.info(`[Webhook] Reactivando agente para ${senderPhone} manualmente.`)
             await debouncerService.setManualMode(sucursal.id, senderPhone, false)
-            
-            // Notificar en el chat que el agente se ha reactivado
-            await EvolutionService.sendTextMessage(apiBase, evoToken, targetInstance, remoteJid, '✅ *Agente Reactivado*. Volveré a responder automáticamente en este chat.')
             
             return NextResponse.json({ received: true, action: 'agent_reactivated' })
         }

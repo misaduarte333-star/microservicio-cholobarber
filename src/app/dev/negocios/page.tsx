@@ -47,7 +47,10 @@ export default function GestorNegocios() {
         // Recordatorios
         recordatorios_activos: false,
         minutos_antes_recordatorio: 15,
-        minutos_tardanza_mensaje: 15
+        minutos_tardanza_mensaje: 15,
+        // Pausa por intervencion
+        intervention_pause_enabled: true,
+        intervention_pause_duration: 60
     })
 
     const [testConnLoading, setTestConnLoading] = useState(false)
@@ -128,7 +131,9 @@ export default function GestorNegocios() {
                 tipo_prestador_label: form.tipo_prestador_label,
                 recordatorios_activos: form.recordatorios_activos,
                 minutos_antes_recordatorio: form.minutos_antes_recordatorio,
-                minutos_tardanza_mensaje: form.minutos_tardanza_mensaje
+                minutos_tardanza_mensaje: form.minutos_tardanza_mensaje,
+                intervention_pause_enabled: form.intervention_pause_enabled,
+                intervention_pause_duration: form.intervention_pause_duration
             }
 
             if (isEditing) {
@@ -169,7 +174,9 @@ export default function GestorNegocios() {
                 tipo_prestador_label: 'Barbero',
                 recordatorios_activos: false,
                 minutos_antes_recordatorio: 15,
-                minutos_tardanza_mensaje: 15
+                minutos_tardanza_mensaje: 15,
+                intervention_pause_enabled: true,
+                intervention_pause_duration: 60
             })
             setIsCreating(false)
             setEditingId(null)
@@ -201,7 +208,9 @@ export default function GestorNegocios() {
             tipo_prestador_label: s.tipo_prestador_label || 'Barbero',
             recordatorios_activos: s.recordatorios_activos || false,
             minutos_antes_recordatorio: s.minutos_antes_recordatorio || 15,
-            minutos_tardanza_mensaje: s.minutos_tardanza_mensaje || 15
+            minutos_tardanza_mensaje: s.minutos_tardanza_mensaje || 15,
+            intervention_pause_enabled: s.intervention_pause_enabled !== undefined ? s.intervention_pause_enabled : true,
+            intervention_pause_duration: s.intervention_pause_duration || 60
         })
         setEditingId(s.id)
         setIsCreating(true)
@@ -662,10 +671,7 @@ export default function GestorNegocios() {
                                             )}
                                         </select>
                                     </div>
-                                </div>
-                            </div>
-
-                            {/* ===== SECCIÓN RECORDATORIOS ===== */}
+                                                  {/* ===== SECCIÓN RECORDATORIOS ===== */}
                             <div className="pt-6 border-t border-slate-700/50">
                                 <div className="flex items-center justify-between mb-4">
                                     <h3 className="text-sm font-bold text-blue-400 uppercase tracking-wider">Recordatorios Automáticos</h3>
@@ -717,7 +723,45 @@ export default function GestorNegocios() {
                                     </div>
                                 </div>
                             </div>
-
+ 
+                            {/* ===== SECCIÓN PAUSA POR INTERVENCIÓN ===== */}
+                            <div className="pt-6 border-t border-slate-700/50">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-sm font-bold text-amber-500 uppercase tracking-wider">Pausa por Intervención Humana</h3>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <span className="text-xs text-slate-400">{form.intervention_pause_enabled ? 'Activada' : 'Desactivada'}</span>
+                                        <div 
+                                            onClick={() => setForm({ ...form, intervention_pause_enabled: !form.intervention_pause_enabled })}
+                                            className={`w-10 h-5 rounded-full relative transition-colors ${form.intervention_pause_enabled ? 'bg-amber-500' : 'bg-slate-700'}`}
+                                        >
+                                            <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${form.intervention_pause_enabled ? 'right-1' : 'left-1'}`} />
+                                        </div>
+                                    </label>
+                                </div>
+ 
+                                <div className={`p-4 rounded-xl bg-amber-500/5 border border-amber-500/10 transition-opacity ${form.intervention_pause_enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                                    <div className="flex items-center gap-6">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-300 mb-2">Duración de la pausa (Minutos)</label>
+                                            <div className="flex items-center gap-3">
+                                                <input
+                                                    type="number"
+                                                    value={form.intervention_pause_duration}
+                                                    onChange={(e) => setForm({ ...form, intervention_pause_duration: parseInt(e.target.value) || 0 })}
+                                                    className="input-field w-24 bg-slate-900 border-slate-700 text-center"
+                                                    min="1"
+                                                    max="10080" // 1 week
+                                                />
+                                                <span className="text-sm text-slate-400">minutos (El bot se reactivará solo después de este tiempo)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 mt-3 italic">
+                                        Si escribes desde el WhatsApp del negocio, el agente dejará de responder a ese chat por el tiempo indicado para que puedas hablar tranquilo.
+                                    </p>
+                                </div>
+                            </div>
+ 
                             <div className="flex justify-end gap-3 pt-4">
                                 <button
                                     type="button"

@@ -67,6 +67,8 @@ export interface Sucursal {
     recordatorios_activos: boolean
     minutos_antes_recordatorio: number
     minutos_tardanza_mensaje: number
+    intervention_pause_enabled: boolean
+    intervention_pause_duration: number
 }
 
 
