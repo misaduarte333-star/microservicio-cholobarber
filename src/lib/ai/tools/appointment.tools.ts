@@ -262,9 +262,22 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
                     })
                 }
 
+                // Supabase retorna los timestamps en UTC (ej: 2026-05-02T00:00:00+00:00 para las 17:00 en Hermosillo).
+                // Formateamos esto de vuelta a la hora local para que la IA no se confunda y diga "mañana" por error.
+                const { formatInTimeZone } = await import('date-fns-tz')
+                const timestampInicioLocal = formatInTimeZone(insertData.timestamp_inicio, APP_TIMEZONE, "yyyy-MM-dd'T'HH:mm:ss")
+                const timestampFinLocal = formatInTimeZone(insertData.timestamp_fin, APP_TIMEZONE, "yyyy-MM-dd'T'HH:mm:ss")
+
                 return JSON.stringify({
                     status: 'ok',
-                    cita: insertData,
+                    cita: {
+                        ...insertData,
+                        timestamp_inicio_utc: insertData.timestamp_inicio,
+                        timestamp_fin_utc: insertData.timestamp_fin,
+                        timestamp_inicio: timestampInicioLocal,
+                        timestamp_fin: timestampFinLocal,
+                        aviso_para_ia: `La cita fue agendada exitosamente para la fecha/hora: ${timestampInicioLocal} (hora local). Confírmale al cliente esta fecha y hora EXACTA.`
+                    },
                     _databaseInteraction: 'citas'
                 })
             } catch (error: any) {
