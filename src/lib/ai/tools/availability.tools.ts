@@ -54,22 +54,83 @@ export const makeValidarHoraTool = (sucursalId: string, timezone: string = 'Amer
                 const todayStr = formatInTimeZone(new Date(), timezone, 'yyyy-MM-dd')
                 if (!fechaStr) fechaStr = todayStr
 
+                const tz = timezone || 'America/Hermosillo'
+
+                // Intentar obtener horario de la sucursal para mayor precisión
+                // IMPORTANTE: usar la fecha SOLICITADA (fechaStr), no la fecha de hoy,
+                // para obtener el horario correcto (ej: sábado abre 10 AM, no jueves 8 AM).
+                const supabase = getAISupabaseClient()
+                const { data: sucursalData } = await supabase
+                    .from('sucursales')
+                    .select('horario_apertura')
+                    .eq('id', sucursalId)
+                    .single()
+
+                // Calcular el día de la semana de la fecha SOLICITADA (no de hoy)
+                const requestedDate = new Date(`${fechaStr}T12:00:00`)
+                let config = undefined
+                if (sucursalData?.horario_apertura) {
+                    const dayName = formatInTimeZone(requestedDate, tz, 'eeee').toLowerCase()
+                    const dayMap: any = {
+                        'monday': 'lunes', 'tuesday': 'martes', 'wednesday': 'miercoles',
+                        'thursday': 'jueves', 'friday': 'viernes', 'saturday': 'sabado', 'sunday': 'domingo'
+                    }
+                    const dayKey = dayMap[dayName] || dayName
+                    const hS = sucursalData.horario_apertura[dayKey]
+                    console.log(`[VALIDAR_HORA] Horario para ${dayKey} (${fechaStr}):`, hS)
+                    if (hS) {
+                        const inicio = hS.apertura || hS.inicio
+                        const fin = hS.cierre || hS.fin
+                        if (inicio && fin) {
+                            config = {
+                                apertura: parseInt(inicio.split(':')[0]),
+                                cierre: parseInt(fin.split(':')[0])
+                            }
+                        }
+                    }
+                }
+
                 // Si la fecha es futura (no hoy), la hora siempre es válida
+                // (solo necesitamos verificar que esté dentro del horario de la sucursal ese día)
                 if (fechaStr > todayStr) {
                     const p = TimeValidator.parseHoraPublic(hora)
                     const r = TimeValidator.redondearPublic(p.h, p.m)
+                    const horaApertura = config?.apertura ?? 9
+                    const horaCierre = config?.cierre ?? 20
+
+                    // Verificar si la hora solicitada está dentro del horario ese día
+                    if (r.h < horaApertura || r.h >= horaCierre) {
+                        // Fuera del horario del día solicitado
+                        const aperturaStr = `${horaApertura.toString().padStart(2, '0')}:00`
+                        const h12 = horaApertura % 12 === 0 ? 12 : horaApertura % 12
+                        const ampm = horaApertura >= 12 ? 'PM' : 'AM'
+                        return JSON.stringify({
+                            status: 'RECHAZADA',
+                            motivo: 'fuera_de_horario',
+                            advertencia: false,
+                            ajustada: false,
+                            hora_solicitada_24h: `${r.h.toString().padStart(2, '0')}:${r.m.toString().padStart(2, '0')}`,
+                            sugerencia_fecha: fechaStr,
+                            siguiente_bloque: aperturaStr,
+                            siguiente_bloque_12h: `${h12}:00 ${ampm}`,
+                            nota: `La sucursal abre de ${aperturaStr} a ${horaCierre}:00 ese día`,
+                            _databaseInteraction: 'sucursales'
+                        })
+                    }
+
                     return JSON.stringify({
                         status: 'VALIDA',
                         motivo: 'ok',
                         advertencia: false,
+                        ajustada: false,
                         hora_solicitada_24h: `${r.h.toString().padStart(2, '0')}:${r.m.toString().padStart(2, '0')}`,
+                        sugerencia_fecha: fechaStr,
                         siguiente_bloque: null,
                         siguiente_bloque_12h: null,
-                        _databaseInteraction: 'Lógica Local'
+                        _databaseInteraction: 'sucursales'
                     })
                 }
 
-                const tz = timezone || 'America/Hermosillo'
                 const formatter = new Intl.DateTimeFormat('es-MX', {
                     timeZone: tz,
                     hour: 'numeric',
@@ -91,35 +152,6 @@ export const makeValidarHoraTool = (sucursalId: string, timezone: string = 'Amer
                 
                 // Debug: log what we're comparing
                 console.log('[VALIDAR_HORA] timezone:', tz, 'hora_actual:', hora_actual, 'hora_solicitada:', hora, 'parsed:', TimeValidator.parseHoraPublic(hora))
-                
-                // Intentar obtener horario de la sucursal para mayor precisión
-                const supabase = getAISupabaseClient()
-                const { data: sucursalData } = await supabase
-                    .from('sucursales')
-                    .select('horario_apertura')
-                    .eq('id', sucursalId) // sucursalId viene del scope de makeValidarHoraTool
-                    .single()
-
-                let config = undefined
-                if (sucursalData?.horario_apertura) {
-                    const dayName = formatInTimeZone(new Date(), tz, 'eeee').toLowerCase()
-                    const dayMap: any = {
-                        'monday': 'lunes', 'tuesday': 'martes', 'wednesday': 'miercoles',
-                        'thursday': 'jueves', 'friday': 'viernes', 'saturday': 'sabado', 'sunday': 'domingo'
-                    }
-                    const dayKey = dayMap[dayName] || dayName
-                    const hS = sucursalData.horario_apertura[dayKey]
-                    if (hS) {
-                        const inicio = hS.apertura || hS.inicio
-                        const fin = hS.cierre || hS.fin
-                        if (inicio && fin) {
-                            config = {
-                                apertura: parseInt(inicio.split(':')[0]),
-                                cierre: parseInt(fin.split(':')[0])
-                            }
-                        }
-                    }
-                }
 
                 const result = TimeValidator.validate({ hora_actual, hora_solicitada: hora }, config)
                 console.log('[VALIDAR_HORA] result:', result)
