@@ -44,14 +44,17 @@ export async function POST(req: Request) {
         console.info(`[Webhook] Processing event for instance: "${rawInstanceName}" (normalized: "${instanceName}")`)
 
         // 2. Extraer datos del mensaje
-        const remoteJid = payload.data.key.remoteJid
-        console.info(`[Webhook DEBUG] Incoming message remoteJid: ${remoteJid}`)
-        if (!remoteJid || remoteJid.includes('@g.us')) {
-            console.info(`[Webhook] Ignoring group message from ${remoteJid}`)
+        // Priorizamos payload.sender (número real) sobre remoteJid (que puede ser un LID interno)
+        const rawRemoteJid = payload.data.key.remoteJid
+        const rawSender = payload.sender || rawRemoteJid
+        
+        if (!rawRemoteJid || rawRemoteJid.includes('@g.us')) {
+            console.info(`[Webhook] Ignorando mensaje de grupo o inválido: ${rawRemoteJid}`)
             return NextResponse.json({ received: true })
         }
 
-        const senderPhone = remoteJid.split('@')[0].split(':')[0]
+        const remoteJid = rawRemoteJid
+        const senderPhone = (rawSender.split('@')[0] || '').split(':')[0]
         const messageType = payload.data.messageType
         
         let messageText = ''
@@ -183,7 +186,6 @@ export async function POST(req: Request) {
         // --- LÓGICA DE MODO MANUAL / INTERVENCIÓN ---
         // 1. Si el mensaje lo envió el barbero (fromMe), activar modo manual
         if (isFromMe) {
-            console.info(`[Webhook DEBUG] Outgoing message key:`, JSON.stringify(payload.data.key))
             // EVITAR AUTO-PAUSA: Verificamos si hay un bloqueo de bot en Redis para este chat
             const botLockKey = `bot_sending:${remoteJid}`
             const isBotMessage = await redis.get(botLockKey)
