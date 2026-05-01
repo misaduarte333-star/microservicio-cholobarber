@@ -164,6 +164,21 @@ export async function POST(req: Request) {
             return NextResponse.json({ received: true, action: 'agent_inactive' })
         }
 
+        // --- CONFIGURACIÓN GLOBAL Y CREDENCIALES ---
+        const { data: configIa, error: globalError } = await supabase
+            .from('configuracion_ia_global')
+            .select('*')
+            .eq('id', 1)
+            .single()
+
+        if (globalError || !configIa || !configIa.evolution_api_url) {
+            console.error('[Webhook] Configuración global de IA incompleta (Falta Evolution URL).')
+            return NextResponse.json({ received: true })
+        }
+
+        const apiBase = configIa.evolution_api_url.endsWith('/') ? configIa.evolution_api_url : `${configIa.evolution_api_url}/`
+        const evoToken = sucursal.agent_evolution_key || configIa.evolution_api_key
+
         // --- LÓGICA DE MODO MANUAL / INTERVENCIÓN ---
         // 1. Si el mensaje lo envió el barbero (fromMe), activar modo manual
         if (isFromMe) {
@@ -178,15 +193,22 @@ export async function POST(req: Request) {
 
             console.info(`[Webhook] Intervención HUMANA detectada en ${instanceName} (Source: ${source}). Pausando agente para ${senderPhone}.`)
             await debouncerService.setManualMode(sucursal.id, senderPhone, true)
+            
+            // Notificar en el chat que el agente se ha pausado
+            await EvolutionService.sendTextMessage(apiBase, evoToken, targetInstance, remoteJid, '⚠️ *Agente Desconectado* para este chat. Escribe *Activar* para volver a activar.')
+            
             return NextResponse.json({ received: true, mode: 'manual_activated' })
         }
 
         // 2. Si el cliente quiere reactivar el bot (o el barbero envía el comando)
-        if (cleanMessageText === 'activar agente' || cleanMessageText === 'reactivar bot' || cleanMessageText === '/activar') {
+        if (cleanMessageText === 'activar' || cleanMessageText === 'activar agente' || cleanMessageText === 'reactivar bot' || cleanMessageText === '/activar') {
             console.info(`[Webhook] Reactivando agente para ${senderPhone}.`)
             await debouncerService.setManualMode(sucursal.id, senderPhone, false)
-            // Opcional: Podríamos enviar un mensaje de confirmación aquí, pero por ahora solo reactivamos
-            // para que el siguiente mensaje ya sea procesado.
+            
+            // Notificar en el chat que el agente se ha reactivado
+            await EvolutionService.sendTextMessage(apiBase, evoToken, targetInstance, remoteJid, '✅ *Agente Reactivado*. Volveré a responder automáticamente en este chat.')
+            
+            return NextResponse.json({ received: true, action: 'agent_reactivated' })
         }
 
         // 3. Verificar si estamos en modo manual
@@ -197,18 +219,7 @@ export async function POST(req: Request) {
         }
         // --- FIN LÓGICA MODO MANUAL ---
 
-        // Segundo, la Configuración Global
-        const { data: configIa, error: globalError } = await supabase
-            .from('configuracion_ia_global')
-            .select('*')
-            .eq('id', 1)
-            .single()
-
-        if (globalError || !configIa || !configIa.evolution_api_url) {
-            console.error('[Webhook] Configuración global de IA incompleta (Falta Evolution URL).')
-            return NextResponse.json({ received: true })
-        }
-
+        // Segundo, la Configuración Global ya fue cargada arriba
         const openaiKey = configIa.openai_api_key || process.env.OPENAI_API_KEY || ''
         const anthropicKey = configIa.anthropic_api_key || process.env.ANTHROPIC_API_KEY || ''
         const groqKey = configIa.groq_api_key || process.env.GROQ_API_KEY || ''
