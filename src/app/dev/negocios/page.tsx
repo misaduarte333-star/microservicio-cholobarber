@@ -671,7 +671,10 @@ export default function GestorNegocios() {
                                             )}
                                         </select>
                                     </div>
-                                                  {/* ===== SECCIÓN RECORDATORIOS ===== */}
+                                </div>
+                            </div>
+
+                            {/* ===== SECCIÓN RECORDATORIOS ===== */}
                             <div className="pt-6 border-t border-slate-700/50">
                                 <div className="flex items-center justify-between mb-4">
                                     <h3 className="text-sm font-bold text-blue-400 uppercase tracking-wider">Recordatorios Automáticos</h3>
