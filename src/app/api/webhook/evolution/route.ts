@@ -60,6 +60,7 @@ export async function POST(req: Request) {
 
         const remoteJid = rawRemoteJid
         let senderPhone = (bestIdentifier.split('@')[0] || '').split(':')[0]
+        const isFromMe = !!payload.data.key.fromMe
  
         // --- MAPEADOR DE LIDs (Para Meta/WhatsApp Business API) ---
         // Si recibimos un mensaje que trae el número real y una referencia al LID anterior, los guardamos en Redis.
@@ -107,7 +108,6 @@ export async function POST(req: Request) {
             if (!payload.data.key.fromMe) return NextResponse.json({ received: true })
         }
 
-        const isFromMe = !!payload.data.key.fromMe
         const cleanMessageText = messageText.toLowerCase().trim()
 
         // 3. Buscar la configuración en Supabase
