@@ -45,6 +45,7 @@ export async function POST(req: Request) {
 
         // 2. Extraer datos del mensaje
         const remoteJid = payload.data.key.remoteJid
+        console.info(`[Webhook DEBUG] Incoming message remoteJid: ${remoteJid}`)
         if (!remoteJid || remoteJid.includes('@g.us')) {
             console.info(`[Webhook] Ignoring group message from ${remoteJid}`)
             return NextResponse.json({ received: true })
@@ -182,6 +183,7 @@ export async function POST(req: Request) {
         // --- LÓGICA DE MODO MANUAL / INTERVENCIÓN ---
         // 1. Si el mensaje lo envió el barbero (fromMe), activar modo manual
         if (isFromMe) {
+            console.info(`[Webhook DEBUG] Outgoing message key:`, JSON.stringify(payload.data.key))
             // EVITAR AUTO-PAUSA: Verificamos si hay un bloqueo de bot en Redis para este chat
             const botLockKey = `bot_sending:${remoteJid}`
             const isBotMessage = await redis.get(botLockKey)
