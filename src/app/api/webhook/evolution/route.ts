@@ -77,7 +77,7 @@ export async function POST(req: Request) {
         let sucursal: any = null
 
         // --- LÓGICA DE RUTEO POR INSTANCIA ---
-        if (instanceName === 'cholobarber' || instanceName === 'cholobarber_v2' || instanceName === 'cholo_barber') {
+        if (instanceName === 'cholobarber' || instanceName === 'cholobarber_v2' || instanceName === 'cholo_barber' || instanceName === 'cholobrbr') {
             // Instancia EXCLUSIVA de producción: Cholo Barber
             const { data } = await supabase.from('sucursales').select('*').eq('id', CHOLO_BARBER_ID).single()
             sucursal = data
