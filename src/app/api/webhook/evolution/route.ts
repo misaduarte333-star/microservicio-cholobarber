@@ -44,17 +44,22 @@ export async function POST(req: Request) {
         console.info(`[Webhook] Processing event for instance: "${rawInstanceName}" (normalized: "${instanceName}")`)
 
         // 2. Extraer datos del mensaje
-        // Priorizamos payload.sender (número real) sobre remoteJid (que puede ser un LID interno)
+        // Intentamos obtener el número real desde senderPn o remoteJid (evitando LIDs si es posible)
         const rawRemoteJid = payload.data.key.remoteJid
-        const rawSender = payload.sender || rawRemoteJid
+        const rawSenderPn = payload.data.key.senderPn
         
-        if (!rawRemoteJid || rawRemoteJid.includes('@g.us')) {
-            console.info(`[Webhook] Ignorando mensaje de grupo o inválido: ${rawRemoteJid}`)
+        // Si el remoteJid es un LID, intentamos usar senderPn que suele traer el número real
+        const bestIdentifier = (rawRemoteJid?.includes('@lid') && rawSenderPn) 
+            ? rawSenderPn 
+            : (rawRemoteJid || '')
+
+        if (!bestIdentifier || bestIdentifier.includes('@g.us')) {
+            console.info(`[Webhook] Ignorando mensaje de grupo o inválido: ${bestIdentifier}`)
             return NextResponse.json({ received: true })
         }
 
         const remoteJid = rawRemoteJid
-        const senderPhone = (rawSender.split('@')[0] || '').split(':')[0]
+        const senderPhone = (bestIdentifier.split('@')[0] || '').split(':')[0]
         const messageType = payload.data.messageType
         
         let messageText = ''
