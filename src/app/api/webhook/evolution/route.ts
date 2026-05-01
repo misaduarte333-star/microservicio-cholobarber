@@ -62,6 +62,18 @@ export async function POST(req: Request) {
         const phoneSource = senderPn || rawRemoteJid
         const senderPhone = (phoneSource.split('@')[0] || '').split(':')[0]
 
+        // --- MAPEO LID ↔ JID (solo guardado, sin complejidad) ---
+        // Cuando Evolution incluye 'previousRemoteJid' nos está diciendo que un LID y un JID son el mismo contacto.
+        // Guardamos ese mapeo en Redis para que el panel de paused-chats pueda fusionar duplicados.
+        const previousRemoteJid = payload.data.key.previousRemoteJid
+        if (!isFromMe && previousRemoteJid && rawRemoteJid && redis.status === 'ready') {
+            try {
+                // Guardar en ambas direcciones para lookups rápidos
+                await redis.set(`jid_alias:${previousRemoteJid}`, rawRemoteJid, 'EX', 604800) // 7 días
+                await redis.set(`jid_alias:${rawRemoteJid}`, previousRemoteJid, 'EX', 604800)
+            } catch {}
+        }
+
         console.info(`[Webhook] remoteJid: ${remoteJid} | senderPhone: ${senderPhone} | fromMe: ${isFromMe}`)
         const messageType = payload.data.messageType
         

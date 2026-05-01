@@ -62,7 +62,7 @@ export default function GestorNegocios() {
     
     const [cardTests, setCardTests] = useState<Record<string, { loading: boolean, status: 'success' | 'error' | null, msg: string }>>({})
     const [appOrigin, setAppOrigin] = useState('')
-    const [pausedChats, setPausedChats] = useState<Record<string, Array<{ chatId: string, ttlSeconds: number }>>>({})
+    const [pausedChats, setPausedChats] = useState<Record<string, Array<{ chatId: string, displayId: string, ttlSeconds: number }>>>({})
 
     const fetchPausedChats = async (sucursalId: string) => {
         try {
@@ -1090,9 +1090,11 @@ export default function GestorNegocios() {
                                             const label = mins > 0
                                                 ? `${mins}m ${secs.toString().padStart(2, '0')}s`
                                                 : `${secs}s`
-                                            const shortId = chat.chatId.length > 22
-                                                ? chat.chatId.substring(0, 22) + '…'
-                                                : chat.chatId
+                                            // Preferir displayId (número limpio) sobre chatId (puede ser LID)
+                                            const display = chat.displayId || chat.chatId
+                                            const shortId = display.length > 26
+                                                ? display.substring(0, 26) + '…'
+                                                : display
                                             return (
                                                 <div key={chat.chatId} className="flex items-center justify-between bg-amber-500/5 border border-amber-500/10 rounded-lg px-2 py-1">
                                                     <div className="flex flex-col">
