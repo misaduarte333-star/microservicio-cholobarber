@@ -51,10 +51,28 @@ export const makeValidarHoraTool = (sucursalId: string, timezone: string = 'Amer
                     })
                 }
 
-                const todayStr = formatInTimeZone(new Date(), timezone, 'yyyy-MM-dd')
+                // Obtener fecha y hora actual en la zona horaria de la sucursal
+                const now = new Date()
+                const todayStr = formatInTimeZone(now, tz, 'yyyy-MM-dd')
+                const hora_actual = formatInTimeZone(now, tz, 'HH:mm')
+                
                 if (!fechaStr) fechaStr = todayStr
 
-                const tz = timezone || 'America/Hermosillo'
+                // 1. Validar fechas en el PASADO
+                if (fechaStr < todayStr) {
+                    return JSON.stringify({
+                        status: 'RECHAZADA',
+                        motivo: 'pasada',
+                        advertencia: false,
+                        ajustada: false,
+                        hora_solicitada_24h: hora, // O parseada
+                        sugerencia_fecha: 'hoy',
+                        siguiente_bloque: null,
+                        siguiente_bloque_12h: null,
+                        nota: 'La fecha solicitada ya pasó.',
+                        _databaseInteraction: 'Lógica Local'
+                    })
+                }
 
                 // Intentar obtener horario de la sucursal para mayor precisión
                 // IMPORTANTE: usar la fecha SOLICITADA (fechaStr), no la fecha de hoy,
@@ -67,7 +85,10 @@ export const makeValidarHoraTool = (sucursalId: string, timezone: string = 'Amer
                     .single()
 
                 // Calcular el día de la semana de la fecha SOLICITADA (no de hoy)
-                const requestedDate = new Date(`${fechaStr}T12:00:00`)
+                // Usamos un formato que preserve la intención de la fecha local
+                const [y, m, d] = fechaStr.split('-').map(Number)
+                const requestedDate = new Date(y, m - 1, d, 12, 0, 0)
+                
                 let config = undefined
                 if (sucursalData?.horario_apertura) {
                     const dayName = formatInTimeZone(requestedDate, tz, 'eeee').toLowerCase()
@@ -90,8 +111,7 @@ export const makeValidarHoraTool = (sucursalId: string, timezone: string = 'Amer
                     }
                 }
 
-                // Si la fecha es futura (no hoy), la hora siempre es válida
-                // (solo necesitamos verificar que esté dentro del horario de la sucursal ese día)
+                // 2. Si la fecha es futura (mañana o después), solo validar contra el horario de apertura/cierre
                 if (fechaStr > todayStr) {
                     const p = TimeValidator.parseHoraPublic(hora)
                     const r = TimeValidator.redondearPublic(p.h, p.m)
@@ -131,26 +151,7 @@ export const makeValidarHoraTool = (sucursalId: string, timezone: string = 'Amer
                     })
                 }
 
-                const formatter = new Intl.DateTimeFormat('es-MX', {
-                    timeZone: tz,
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: false,
-                    hourCycle: 'h23'
-                })
-                let hora_actual = formatter.format(new Date())
-                
-                // Fallback: si la hora no tiene formato HH:mm, usar el timezone del sistema
-                if (!hora_actual.includes(':')) {
-                    const fallbackFormatter = new Intl.DateTimeFormat('es-MX', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: false
-                    })
-                    hora_actual = fallbackFormatter.format(new Date())
-                }
-                
-                // Debug: log what we're comparing
+                // 3. Si la fecha es HOY, usar la lógica completa de TimeValidator (comparando vs hora actual)
                 console.log('[VALIDAR_HORA] timezone:', tz, 'hora_actual:', hora_actual, 'hora_solicitada:', hora, 'parsed:', TimeValidator.parseHoraPublic(hora))
 
                 const result = TimeValidator.validate({ hora_actual, hora_solicitada: hora }, config)
