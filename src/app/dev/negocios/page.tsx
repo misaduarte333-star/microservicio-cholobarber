@@ -39,6 +39,7 @@ export default function GestorNegocios() {
         agent_evolution_key: '',
         agent_enabled: true,  // Webhook Evo
         agent_active: true,   // IA Bot
+        agent_timeout_ms: 3000,
         llm_provider: '', // default a global
         llm_model: '',
         // Tipo Prestador
@@ -177,6 +178,7 @@ export default function GestorNegocios() {
                 agent_evolution_key: form.agent_evolution_key,
                 agent_enabled: form.agent_enabled,
                 agent_active: form.agent_active,
+                agent_timeout_ms: form.agent_timeout_ms,
                 llm_provider: form.llm_provider || null,
                 llm_model: form.llm_model || null,
                 tipo_prestador: form.tipo_prestador,
@@ -221,6 +223,7 @@ export default function GestorNegocios() {
                 agent_evolution_key: '',
                 agent_enabled: true,
                 agent_active: true,
+                agent_timeout_ms: 3000,
                 llm_provider: '',
                 llm_model: '',
                 tipo_prestador: 'barbero',
@@ -256,6 +259,7 @@ export default function GestorNegocios() {
             agent_evolution_key: s.agent_evolution_key || '',
             agent_enabled: s.agent_enabled !== undefined ? s.agent_enabled : true,
             agent_active: s.agent_active !== undefined ? s.agent_active : true,
+            agent_timeout_ms: s.agent_timeout_ms || 3000,
             llm_provider: s.llm_provider || '',
             llm_model: s.llm_model || '',
             tipo_prestador: s.tipo_prestador || 'barbero',
@@ -306,6 +310,24 @@ export default function GestorNegocios() {
             fetchSucursales()
         } catch (err) {
             alert(`Error al actualizar estado: ` + formatError(err))
+        }
+    }
+
+    const updateNumericField = async (id: string, field: string, value: number) => {
+        try {
+            const res = await fetch('/api/dev/negocios', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, [field]: value })
+            })
+
+            if (!res.ok) {
+                const err = await res.json()
+                throw new Error(err.error)
+            }
+            fetchSucursales()
+        } catch (err) {
+            alert(`Error al actualizar campo: ` + formatError(err))
         }
     }
 
@@ -639,6 +661,7 @@ export default function GestorNegocios() {
                                             <option value="Funny">Divertido / Informal</option>
                                         </select>
                                     </div>
+
                                     <div className="flex flex-col">
                                         <label className="block text-sm font-medium text-slate-300 mb-2">Instancia Evolution API</label>
                                         <input
@@ -984,12 +1007,43 @@ export default function GestorNegocios() {
                                 <div className="flex justify-between items-center">
                                     <span className="text-slate-500">Bot IA:</span>
                                     <button 
-                                        onClick={() => toggleField(s.id, 'agent_active', s.agent_active)}
-                                        className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all active:scale-95 hover:opacity-80 border ${s.agent_active ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'bg-slate-700/50 text-slate-400 border-slate-600/50'}`}
-                                        title="Clic para pausar o activar el Agente de IA"
+                                        onClick={() => !isPruebas(s) && toggleField(s.id, 'agent_active', s.agent_active)}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all active:scale-95 hover:opacity-80 border ${
+                                            (s.agent_active || isPruebas(s)) 
+                                                ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' 
+                                                : 'bg-slate-700/50 text-slate-400 border-slate-600/50'
+                                        }`}
+                                        title={isPruebas(s) ? "Forzado ONLINE por ser instancia de pruebas" : "Clic para pausar o activar el Agente de IA"}
+                                        disabled={isPruebas(s)}
                                     >
-                                        {s.agent_active ? 'ONLINE' : 'OFFLINE'}
+                                        {(s.agent_active || isPruebas(s)) ? 'ONLINE' : 'OFFLINE'}
                                     </button>
+                                </div>
+                                
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-slate-500 text-xs">Debounce IA (ms):</span>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="number"
+                                            defaultValue={s.agent_timeout_ms || 3000}
+                                            onBlur={(e) => {
+                                                const val = parseInt(e.target.value)
+                                                if (!isNaN(val) && val !== s.agent_timeout_ms) {
+                                                    updateNumericField(s.id, 'agent_timeout_ms', val)
+                                                }
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    const val = parseInt((e.target as HTMLInputElement).value)
+                                                    if (!isNaN(val)) {
+                                                        updateNumericField(s.id, 'agent_timeout_ms', val)
+                                                        ;(e.target as HTMLInputElement).blur()
+                                                    }
+                                                }
+                                            }}
+                                            className="w-16 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-right font-mono text-amber-400 focus:border-amber-500 outline-none"
+                                        />
+                                    </div>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-slate-500">Plan:</span>

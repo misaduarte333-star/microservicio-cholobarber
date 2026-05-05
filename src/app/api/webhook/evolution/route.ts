@@ -225,7 +225,9 @@ export async function POST(req: Request) {
 
 
         // --- VALIDACIÓN DE BOT ACTIVO ---
-        if (sucursal.agent_active === false) {
+        const isTestInstance = instanceName === 'pruebas' || instanceName === 'barberia'
+        
+        if (sucursal.agent_active === false && !isTestInstance) {
             console.info(`[Webhook] Agente IA desactivado globalmente para ${sucursal.nombre}. Ignorando respuesta.`)
             return NextResponse.json({ received: true, action: 'agent_inactive' })
         }
@@ -342,6 +344,7 @@ export async function POST(req: Request) {
                 customPrompt: sucursal.agent_custom_prompt,
                 tipoPrestador: sucursal.tipo_prestador || 'barbero',
                 tipoPrestadorLabel: sucursal.tipo_prestador_label || 'Barbero',
+                agentTimeoutMs: sucursal.agent_timeout_ms || 3000,
                 aiProvider: provider as any,
                 aiModel: aiModel,
                 openaiKey,

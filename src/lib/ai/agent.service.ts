@@ -21,6 +21,7 @@ export interface AgentContext {
     customPrompt?: string | null
     tipoPrestador?: string       // 'barbero' | 'estilista' | 'pedicurista' | etc.
     tipoPrestadorLabel?: string  // Etiqueta legible: 'Barbero', 'Estilista', etc.
+    agentTimeoutMs?: number
     // Multi Provider support
     aiProvider: 'openai' | 'anthropic' | 'groq'
     aiModel: string

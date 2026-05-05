@@ -70,6 +70,7 @@ export interface Sucursal {
     intervention_pause_enabled: boolean
     intervention_pause_duration: number
     blocked_phones: string[] | null
+    agent_timeout_ms: number
 }
 
 

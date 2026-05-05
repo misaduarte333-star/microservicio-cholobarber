@@ -151,6 +151,7 @@ export class DebouncerService {
     public async pushMessage(msg: IncomingMessage) {
         const listKey = `buffer:${msg.context.sucursalId}:${msg.senderPhone}`
         const timerKey = `timer:${msg.context.sucursalId}:${msg.senderPhone}`
+        const timeoutMs = msg.context.agentTimeoutMs || this.DEBOUNCE_TIME_MS
 
         // Intentar Redis primero
         if (redis.status === 'ready') {
@@ -159,7 +160,7 @@ export class DebouncerService {
                 const hasTimer = await redis.get(timerKey)
                 if (!hasTimer) {
                     await redis.set(timerKey, 'running', 'EX', 10)
-                    setTimeout(() => this.processBuffer(msg.senderPhone, msg.context, msg.remoteJid), this.DEBOUNCE_TIME_MS)
+                    setTimeout(() => this.processBuffer(msg.senderPhone, msg.context, msg.remoteJid), timeoutMs)
                 }
                 return
             } catch (err) {
@@ -173,7 +174,7 @@ export class DebouncerService {
 
         if (!memoryTimer.has(timerKey)) {
             memoryTimer.add(timerKey)
-            setTimeout(() => this.processBuffer(msg.senderPhone, msg.context, msg.remoteJid), this.DEBOUNCE_TIME_MS)
+            setTimeout(() => this.processBuffer(msg.senderPhone, msg.context, msg.remoteJid), timeoutMs)
         }
     }
 
