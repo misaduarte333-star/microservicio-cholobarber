@@ -12,8 +12,8 @@ export class CatalogCacheService {
      * @param prestadorLabel - Cómo llamar al prestador: 'Barbero', 'Estilista', 'Pedicurista', etc.
      */
     public static async getCatalogContext(sucursalId: string, prestadorLabel: string = 'Barbero'): Promise<string> {
-        // La clave de caché es única por sucursal (el label se reconstruye al invalidar)
-        const cacheKey = `${this.CACHE_KEY_PREFIX}${sucursalId}`
+        // La clave de caché es única por sucursal y por el label del prestador
+        const cacheKey = `${this.CACHE_KEY_PREFIX}${sucursalId}:${prestadorLabel.toLowerCase()}`
 
         // 1. Intentar leer desde Memoria Redis (Super rápido)
         if (redis.status === 'ready') {

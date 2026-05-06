@@ -28,6 +28,12 @@ export interface AgentContext {
     openaiKey: string
     anthropicKey?: string | null
     groqKey?: string | null
+    // Webhook Context
+    evoToken?: string
+    evoEndpoint?: string
+    apiBase?: string
+    instanceName?: string
+    presenceInstance?: string
 }
 
 export interface AgentStep {
@@ -62,13 +68,14 @@ export class AgentService {
         const supabase = getAISupabaseClient()
         const phoneNormalized = normalizePhone(senderPhone)
 
-        let sucursalRes, clienteRes, businessCatalogStr
+        let sucursalRes, clienteRes, businessCatalogStr, barberosRes
         try {
-            [sucursalRes, clienteRes, businessCatalogStr] = await Promise.all([
+            [sucursalRes, clienteRes, businessCatalogStr, barberosRes] = await Promise.all([
                 supabase.from('sucursales').select('nombre, direccion, telefono_whatsapp, horario_apertura, created_at, updated_at')
                     .eq('id', ctx.sucursalId).single(),
                 supabase.from('clientes').select('id, nombre').eq('telefono', phoneNormalized).limit(1).maybeSingle(),
-                CatalogCacheService.getCatalogContext(ctx.sucursalId, ctx.tipoPrestadorLabel || 'Barbero')
+                CatalogCacheService.getCatalogContext(ctx.sucursalId, ctx.tipoPrestadorLabel || 'Barbero'),
+                supabase.from('barberos').select('nombre').eq('sucursal_id', ctx.sucursalId).eq('activo', true)
             ])
 
             if (sucursalRes.error) throw new Error(`Error sucursal data: ${sucursalRes.error.message}`)
@@ -95,6 +102,9 @@ export class AgentService {
         console.log(`[AgentService] System Prompt Length: ${systemPromptStr.length} chars`)
 
         // 3. Crear LLM dinámico según el proveedor configurado
+        const MAX_OUTPUT_TOKENS = 500
+        const LLM_TIMEOUT_MS = 30000
+
         let llm: any
 
         if (ctx.aiProvider === 'anthropic' && ctx.anthropicKey) {
@@ -102,20 +112,30 @@ export class AgentService {
             llm = new ChatAnthropic({
                 anthropicApiKey: ctx.anthropicKey,
                 modelName: ctx.aiModel,
-                temperature: 0
+                temperature: 0,
+                maxTokens: MAX_OUTPUT_TOKENS,
+                timeout: LLM_TIMEOUT_MS,
+                maxRetries: 2
             })
         } else if (ctx.aiProvider === 'groq' && ctx.groqKey) {
             const { ChatGroq } = await import('@langchain/groq')
             llm = new ChatGroq({
                 apiKey: ctx.groqKey,
                 model: ctx.aiModel,
-                temperature: 0
+                temperature: 0,
+                maxTokens: MAX_OUTPUT_TOKENS,
+                timeout: LLM_TIMEOUT_MS,
+                maxRetries: 2
             })
         } else {
+            const { ChatOpenAI } = await import('@langchain/openai')
             llm = new ChatOpenAI({
                 openAIApiKey: ctx.openaiKey,
                 modelName: ctx.aiModel,
-                temperature: 0
+                temperature: 0,
+                maxTokens: MAX_OUTPUT_TOKENS,
+                timeout: LLM_TIMEOUT_MS,
+                maxRetries: 2
             })
         }
 
@@ -169,30 +189,38 @@ export class AgentService {
             console.log(`Custom Prompt found: ${ctx.customPrompt ? 'YES' : 'NO'}`)
             if (ctx.customPrompt) console.log(`Custom Prompt Content:\n${ctx.customPrompt}`)
 
-            const result = await agent.invoke({
+            let result = await agent.invoke({
                 messages: messages,
-            }, {
-                recursionLimit: 50 // Límite de pasos aumentado para evitar GRAPH_RECURSION_LIMIT
+                recursionLimit: 12 // Límite reducido para evitar costos altos si el modelo entra en loop
             })
 
             // 6.5 VALIDAR COMPLIANCE DE TOOLS (Enforcement) - MODO ESTRICTO
-            const toolsUsed = new Set<string>()
-            for (const msg of result.messages) {
-                if (msg._getType?.() === 'ai') {
-                    const toolCalls = (msg as any).tool_calls
-                    if (toolCalls && toolCalls.length > 0) {
-                        for (const tc of toolCalls) {
-                            toolsUsed.add(tc.name)
-                        }
-                    }
-                }
-            }
-            
-            const enforcementCheck = enforceToolCompliance(result, {
+            let enforcementCheck = enforceToolCompliance(result, {
                 userInput: input,
                 triggerValidation: inputValidation,
                 maxRetries: 2
             }, 1)
+            
+            // Si falla el compliance y se recomienda reintentar
+            if (!enforcementCheck.compliant && enforcementCheck.shouldRetry && enforcementCheck.retryInstruction) {
+                console.log(`[TOOL ENFORCEMENT] 🔄 Forzando reintento del agente para usar tools requeridas...`)
+                
+                const retryMessage = new HumanMessage(enforcementCheck.retryInstruction)
+
+                // Re-invocar agente añadiendo el mensaje de retry
+                result = await agent.invoke({
+                    messages: [...result.messages, retryMessage]
+                }, {
+                    recursionLimit: 12
+                })
+                
+                // Segunda validación
+                enforcementCheck = enforceToolCompliance(result, {
+                    userInput: input,
+                    triggerValidation: inputValidation,
+                    maxRetries: 2
+                }, 2)
+            }
             
             let hasComplianceViolation = false
             if (!enforcementCheck.compliant) {
@@ -305,7 +333,19 @@ export class AgentService {
             await chatHistory.addAIMessage(outputText)
 
             // 8.5 VALIDAR RESPUESTA FINAL (Detectar alucinaciones)
-            const finalResponseValidation = validateFinalResponse(outputText, toolsUsed, inputValidation)
+            const toolsUsed = new Set<string>()
+            for (const msg of result.messages) {
+                if (msg._getType?.() === 'ai') {
+                    const toolCalls = (msg as any).tool_calls
+                    if (toolCalls && toolCalls.length > 0) {
+                        for (const tc of toolCalls) {
+                            toolsUsed.add(tc.name)
+                        }
+                    }
+                }
+            }
+            const knownBarberNames = (barberosRes?.data || []).map((b: any) => b.nombre)
+            const finalResponseValidation = validateFinalResponse(outputText, toolsUsed, inputValidation, knownBarberNames)
             if (!finalResponseValidation.isValid) {
                 console.warn(`[RESPONSE VALIDATION] WARNING: Possible hallucinations detected:`, finalResponseValidation.issues)
                 // Loguear pero no rechazar - la respuesta ya fue enviada
@@ -314,6 +354,18 @@ export class AgentService {
             // 9. Registrar métricas de latencia y herramientas usadas
             const latencyMs = Date.now() - startTimestamp
             const toolMessages = result.messages.filter((m: any) => m._getType?.() === 'tool')
+            
+            // Extraer uso de tokens (soporte para LangChain usage_metadata)
+            const lastAIMsg = [...result.messages].reverse().find((m: any) => m._getType?.() === 'ai' && m.content)
+            const usage = (lastAIMsg as any)?.usage_metadata
+            
+            // Cálculo rudimentario de costo (ej: gpt-4o-mini)
+            let estimatedCost = 0
+            if (usage) {
+                const promptCost = (usage.input_tokens / 1000000) * 0.15
+                const completionCost = (usage.output_tokens / 1000000) * 0.60
+                estimatedCost = promptCost + completionCost
+            }
 
             MetricsService.record({
                 id: crypto.randomUUID(),
@@ -324,12 +376,17 @@ export class AgentService {
                 inputPreview: input.substring(0, 1000),
                 outputPreview: outputText.substring(0, 1000),
                 latencyMs,
+                tokensPrompt: usage?.input_tokens,
+                tokensCompletion: usage?.output_tokens,
+                tokensTotal: usage?.total_tokens,
+                cost: estimatedCost,
                 toolsUsed: toolMessages.map((m: any) => {
                     const rawContent = String(m.content ?? '')
                     let dbInt = undefined
                     try {
                         const parsed = JSON.parse(rawContent)
                         dbInt = parsed._databaseInteraction
+                        if (parsed._databaseInteraction) delete parsed._databaseInteraction
                     } catch {}
 
                     return {

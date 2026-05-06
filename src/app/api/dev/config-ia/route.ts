@@ -1,39 +1,41 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import type { Database } from '@/lib/types'
+import { requireDevAuth } from '@/lib/auth'
+import type { ConfigIA } from '@/lib/types.config-ia'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const TABLE = 'configuracion_ia_global'
 
-/**
- * GET /api/dev/config-ia
- * Returns the global AI configuration
- */
-export async function GET() {
-    const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey)
-    
+export async function GET(req: Request) {
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
     try {
         const { data, error } = await supabase
-            .from('configuracion_ia_global')
+            .from(TABLE)
             .select('*')
             .eq('id', 1)
             .single()
+
+        const row = data as ConfigIA | null
 
         if (error && error.code !== 'PGRST116') {
             return NextResponse.json({ error: error.message }, { status: 500 })
         }
 
-        // Si no hay datos en la DB, o para campos nulos, usar variables de entorno como fallback
         const config = {
-            evolution_api_url: data?.evolution_api_url || process.env.EVOLUTION_API_URL || '',
-            evolution_api_key: data?.evolution_api_key || process.env.EVOLUTION_API_KEY || '',
-            openai_api_key: data?.openai_api_key || process.env.OPENAI_API_KEY || '',
-            anthropic_api_key: data?.anthropic_api_key || process.env.ANTHROPIC_API_KEY || '',
-            groq_api_key: data?.groq_api_key || process.env.GROQ_API_KEY || '',
-            default_provider: data?.default_provider || 'openai',
-            openai_model: data?.openai_model || 'gpt-4o-mini',
-            anthropic_model: data?.anthropic_model || 'claude-3-5-sonnet-20240620',
-            groq_model: data?.groq_model || 'llama-3.1-70b-versatile'
+            evolution_api_url: row?.evolution_api_url || process.env.EVOLUTION_API_URL || '',
+            evolution_api_key: row?.evolution_api_key || process.env.EVOLUTION_API_KEY || '',
+            openai_api_key: row?.openai_api_key || process.env.OPENAI_API_KEY || '',
+            anthropic_api_key: row?.anthropic_api_key || process.env.ANTHROPIC_API_KEY || '',
+            groq_api_key: row?.groq_api_key || process.env.GROQ_API_KEY || '',
+            default_provider: row?.default_provider || 'openai',
+            openai_model: row?.openai_model || 'gpt-4o-mini',
+            anthropic_model: row?.anthropic_model || 'claude-3-5-sonnet-20240620',
+            groq_model: row?.groq_model || 'llama-3.1-70b-versatile'
         }
 
         return NextResponse.json({ config })
@@ -42,19 +44,16 @@ export async function GET() {
     }
 }
 
-
-/**
- * POST /api/dev/config-ia
- * Updates the global AI configuration
- */
 export async function POST(req: Request) {
-    const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey)
-    
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
     try {
         const body = await req.json()
-        
-        const input: Database['public']['Tables']['configuracion_ia_global']['Insert'] = {
-            id: 1,
+
+        const input: Omit<ConfigIA, 'id'> = {
             evolution_api_url: body.evolution_api_url || null,
             evolution_api_key: body.evolution_api_key || null,
             openai_api_key: body.openai_api_key || null,
@@ -67,8 +66,8 @@ export async function POST(req: Request) {
         }
 
         const { data, error } = await supabase
-            .from('configuracion_ia_global')
-            .upsert(input as any)
+            .from(TABLE)
+            .upsert({ id: 1, ...input })
             .select()
             .single()
 

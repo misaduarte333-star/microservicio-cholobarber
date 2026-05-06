@@ -10,7 +10,7 @@ const globalForPg = globalThis as unknown as {
 
 const pool = globalForPg.pgPool ?? new Pool({
     connectionString: process.env.DATABASE_URL,
-    max: 20,
+    max: 3, // Reducido para evitar agotar conexiones en serverless/edge (NH-07)
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
 })

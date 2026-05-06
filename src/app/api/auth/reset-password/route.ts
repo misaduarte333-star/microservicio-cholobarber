@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
+import { requireDevAuth } from '@/lib/auth'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -8,11 +9,14 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.
 /**
  * POST /api/auth/reset-password
  * Restablece la contraseña de un admin o barbero.
- * Solo accesible desde el panel dev (protegido por sesión dev en el frontend).
+ * Requiere autenticación dev.
  *
  * Body: { table: 'usuarios_admin' | 'barberos', userId: string, newPassword: string }
  */
 export async function POST(req: NextRequest) {
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
     try {
         const { table, userId, newPassword } = await req.json()
 
@@ -20,12 +24,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Faltan parámetros: table, userId, newPassword' }, { status: 400 })
         }
 
-        if (table !== 'usuarios_admin' && table !== 'barberos') {
-            return NextResponse.json({ error: 'Tabla inválida' }, { status: 400 })
+        // FIX: Solo permitir reset de admins desde el panel dev
+        if (table !== 'usuarios_admin') {
+            return NextResponse.json({ error: 'Solo se pueden resetear contraseñas de administradores desde este endpoint' }, { status: 403 })
         }
 
-        if (newPassword.length < 6) {
-            return NextResponse.json({ error: 'La contraseña debe tener al menos 6 caracteres' }, { status: 400 })
+        // FIX: Mínimo 8 caracteres
+        if (newPassword.length < 8) {
+            return NextResponse.json({ error: 'La contraseña debe tener al menos 8 caracteres' }, { status: 400 })
         }
 
         const hash = await bcrypt.hash(newPassword, 10)

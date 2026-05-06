@@ -76,7 +76,7 @@ export function enforceToolCompliance(
     for (const required of requiredTools) {
         if (!toolsUsed.has(required)) {
             // Excepciones donde no es crítico
-            if (required === 'DISPONIBILIDAD_HOY' && toolsUsed.has('DISPONIBILIDAD_OTRO_DÍA')) {
+            if (required === 'DISPONIBILIDAD_HOY' && toolsUsed.has('DISPONIBILIDAD_OTRO_DIA')) {
                 continue // OK, se usó alternativa
             }
             toolsNotUsed.push(required)
@@ -143,8 +143,8 @@ function buildRetryInstruction(
     }
     
     if (triggers.requiresAvailabilityCheck && 
-        (missingTools.includes('DISPONIBILIDAD_HOY') || missingTools.includes('DISPONIBILIDAD_OTRO_DÍA'))) {
-        instruction += `El usuario pregunta sobre disponibilidad. DEBES llamar DISPONIBILIDAD_HOY o DISPONIBILIDAD_OTRO_DÍA antes de responder.\n\n`
+        (missingTools.includes('DISPONIBILIDAD_HOY') || missingTools.includes('DISPONIBILIDAD_OTRO_DIA'))) {
+        instruction += `El usuario pregunta sobre disponibilidad. DEBES llamar DISPONIBILIDAD_HOY o DISPONIBILIDAD_OTRO_DIA antes de responder.\n\n`
     }
     
     if (triggers.requiresBarberList && missingTools.includes('Consultar_Barberos')) {
@@ -163,15 +163,27 @@ function buildRetryInstruction(
 export function validateFinalResponse(
     responseText: string,
     toolsUsed: Set<string>,
-    triggers: InputValidationResult
+    triggers: InputValidationResult,
+    knownBarberNames: string[] = []
 ): { isValid: boolean; issues: string[] } {
     const issues: string[] = []
 
     // Si dijo nombres de barberos sin haber llamado CONSULTAR_BARBEROS o DISPONIBILIDAD
     if (triggers.requiresBarberList || triggers.requiresAvailabilityCheck) {
-        const barberNames = responseText.match(/\b(Carlos|Angel|Gabriel|Misap|Estilista|Pedicurista)\b/gi) || []
+        // Escapar nombres para evitar inyecciones en regex y filtrar nombres muy cortos
+        const escapedNames = knownBarberNames
+            .filter(n => n && n.length > 2)
+            .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        
+        // Si no hay nombres conocidos, usamos una lista genérica básica como fallback
+        const pattern = escapedNames.length > 0 
+            ? new RegExp(`\\b(${escapedNames.join('|')})\\b`, 'gi')
+            : /\b(Carlos|Angel|Gabriel|Misap|Estilista|Pedicurista)\b/gi
+            
+        const matches = responseText.match(pattern) || []
+        const barberNames = [...new Set(matches)] // Únicos
         const hasAvailabilityTool = toolsUsed.has('DISPONIBILIDAD_HOY') || 
-                                    toolsUsed.has('DISPONIBILIDAD_OTRO_DÍA') ||
+                                    toolsUsed.has('DISPONIBILIDAD_OTRO_DIA') ||
                                     toolsUsed.has('Consultar_Barberos')
         
         if (barberNames.length > 0 && !hasAvailabilityTool) {

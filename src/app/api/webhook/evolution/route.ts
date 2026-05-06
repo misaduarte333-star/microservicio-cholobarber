@@ -10,7 +10,9 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const CHOLO_BARBER_ID = 'f07a7640-9d86-499f-a048-24109345787a'
+const CHOLO_BARBER_ID = process.env.CHOLO_BARBER_ID || 'f07a7640-9d86-499f-a048-24109345787a'
+
+import { createHmac } from 'crypto'
 
 /**
  * Route handler for the Evolution API Webhook.
@@ -25,8 +27,34 @@ const CHOLO_BARBER_ID = 'f07a7640-9d86-499f-a048-24109345787a'
 export async function POST(req: Request) {
     try {
         console.info(`[Webhook] Incoming request: ${req.method} ${req.url}`)
-        const payload = await req.json()
-        console.dir(payload, { depth: null })
+        
+        const rawBody = await req.text()
+        const secret = process.env.EVOLUTION_WEBHOOK_SECRET
+
+        // 1. Verificación de firma HMAC / API Key (Seguridad Crítica)
+        if (secret) {
+            const signature = req.headers.get('apikey') || req.headers.get('signature') || req.headers.get('x-hub-signature') || ''
+            const hmac = createHmac('sha256', secret).update(rawBody).digest('hex')
+            const expectedSig = signature.replace('sha256=', '')
+
+            if (signature !== secret && expectedSig !== hmac) {
+                console.warn('[Webhook] 🔴 FIRMA INVÁLIDA. Posible inyección de mensajes rechazada.')
+                return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+            }
+        }
+
+        let payload: any
+        try {
+            payload = JSON.parse(rawBody)
+        } catch {
+            return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+        }
+
+        if (process.env.NODE_ENV !== 'production') {
+            console.dir(payload, { depth: null })
+        } else {
+            console.info(`[Webhook] Payload recibido - Instance: ${payload?.instance}, Event: ${payload?.event}`)
+        }
 
         // Si Evolution nos manda validaciones o payloads incompletos, ignoramos
         if (!payload || !payload.data || !payload.data.key) {
@@ -88,11 +116,28 @@ export async function POST(req: Request) {
         console.info(`[Webhook] remoteJid: ${remoteJid} | senderPhone: ${senderPhone} | fromMe: ${isFromMe}`)
         const messageType = payload.data.messageType
         // --- CONFIGURACIÓN GLOBAL (Requerida temprano para descargar audios) ---
-        const { data: configIa, error: globalError } = await supabase
-            .from('configuracion_ia_global')
-            .select('*')
-            .eq('id', 1)
-            .single()
+        let configIa: any = null
+        let globalError: any = null
+        
+        if (redis.status === 'ready') {
+            try {
+                const cached = await redis.get('config_ia_global')
+                if (cached) configIa = JSON.parse(cached)
+            } catch {}
+        }
+        
+        if (!configIa) {
+            const { data, error } = await supabase
+                .from('configuracion_ia_global')
+                .select('*')
+                .eq('id', 1)
+                .single()
+            configIa = data
+            globalError = error
+            if (configIa && redis.status === 'ready') {
+                await redis.set('config_ia_global', JSON.stringify(configIa), 'EX', 3600) // 1 hora TTL
+            }
+        }
 
         const apiBaseGlobal = configIa?.evolution_api_url?.endsWith('/') ? configIa.evolution_api_url : `${configIa?.evolution_api_url}/`
         const evoTokenGlobal = configIa?.evolution_api_key
@@ -314,7 +359,6 @@ export async function POST(req: Request) {
         const evoEndpoint = `${apiBase}message/sendText/${targetInstance}`
 
         console.info(`[Webhook] Processing session ${sessionId} on instance ${targetInstance}`)
-        console.info(`[Webhook] Using Token: ${evoToken?.substring(0, 5)}... | Endpoint: ${evoEndpoint}`)
 
         const provider = sucursal.llm_provider || configIa.default_provider || 'openai'
         let aiModel = configIa.openai_model || 'gpt-4o-mini' // default fallback
@@ -333,14 +377,15 @@ export async function POST(req: Request) {
             senderPhone,
             pushName: payload.data.pushName || 'Desconocido',
             text: messageText,
-            timestamp: payload.data.messageTimestamp?.toString(),
+            timestamp: payload.data.messageTimestamp?.toString() ?? Date.now().toString(),
             remoteJid,
             context: {
                 sucursalId: sucursal.id,
                 nombre: sucursal.nombre,
                 agentName: sucursal.agent_name || 'Asistente',
                 personality: sucursal.agent_personality || 'friendly',
-                timezone: 'America/Hermosillo',
+                greeting: sucursal.agent_greeting, // Conectado al campo de tu SQL
+                timezone: sucursal.timezone || 'America/Hermosillo',
                 customPrompt: sucursal.agent_custom_prompt,
                 tipoPrestador: sucursal.tipo_prestador || 'barbero',
                 tipoPrestadorLabel: sucursal.tipo_prestador_label || 'Barbero',

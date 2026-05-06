@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
+import { requireDevAuth } from '@/lib/auth'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -9,7 +10,10 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
  * GET /api/dev/negocios
  * Devuelve todas las sucursales con contadores y datos del admin.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
     try {
         const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -53,6 +57,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
     try {
         const { 
             nombre, slug, plan, adminEmail, adminPassword, telefono_whatsapp,
@@ -146,11 +153,37 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
     try {
         const body = await req.json()
-        const { id, ...updates } = body
+        const { id, ...rawUpdates } = body
 
         if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 })
+
+        // Allowlist: solo campos permitidos pueden actualizarse
+        const ALLOWED_FIELDS = new Set([
+            'nombre', 'slug', 'plan', 'telefono_whatsapp', 'activa', 'horario_apertura',
+            'agent_name', 'agent_personality', 'agent_instance_name', 'agent_evolution_key',
+            'agent_enabled', 'agent_active', 'agent_timeout_ms', 'agent_custom_prompt',
+            'tipo_prestador', 'tipo_prestador_label',
+            'llm_provider', 'llm_model', 'llm_api_key',
+            'recordatorios_activos', 'minutos_antes_recordatorio', 'minutos_tardanza_mensaje',
+            'intervention_pause_enabled', 'intervention_pause_duration',
+            'blocked_phones', 'slot_booking_mode'
+        ])
+
+        const updates: Record<string, any> = {}
+        for (const [key, value] of Object.entries(rawUpdates)) {
+            if (ALLOWED_FIELDS.has(key)) {
+                updates[key] = value
+            }
+        }
+
+        if (Object.keys(updates).length === 0) {
+            return NextResponse.json({ error: 'No hay campos válidos para actualizar' }, { status: 400 })
+        }
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey)
         
@@ -167,6 +200,9 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
     try {
         const { searchParams } = new URL(req.url)
         const id = searchParams.get('id')
@@ -179,6 +215,19 @@ export async function DELETE(req: NextRequest) {
         if (suc?.slug === 'negocio-principal') {
             return NextResponse.json({ error: 'No se puede eliminar la sucursal principal del desarrollador' }, { status: 403 })
         }
+
+        // Cascade: eliminar datos dependientes en orden
+        await supabase.from('costos_fijos').delete().eq('sucursal_id', id)
+        await supabase.from('ia_request_logs').delete().eq('sucursal_id', id)
+        await supabase.from('n8n_chat_histories').delete().eq('session_id', `${id}:`)
+        const { error: citasErr } = await supabase.from('citas').delete().eq('sucursal_id', id)
+        if (citasErr) console.warn('[DELETE negocio] Error borrando citas:', citasErr.message)
+        const { error: serviciosErr } = await supabase.from('servicios').delete().eq('sucursal_id', id)
+        if (serviciosErr) console.warn('[DELETE negocio] Error borrando servicios:', serviciosErr.message)
+        const { error: barberosErr } = await supabase.from('barberos').delete().eq('sucursal_id', id)
+        if (barberosErr) console.warn('[DELETE negocio] Error borrando barberos:', barberosErr.message)
+        const { error: adminsErr } = await supabase.from('usuarios_admin').delete().eq('sucursal_id', id)
+        if (adminsErr) console.warn('[DELETE negocio] Error borrando admins:', adminsErr.message)
 
         const { error } = await supabase.from('sucursales').delete().eq('id', id)
         if (error) throw error

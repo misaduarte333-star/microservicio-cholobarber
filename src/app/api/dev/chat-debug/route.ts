@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { AgentService, AgentContext } from '@/lib/ai/agent.service'
+import { requireDevAuth } from '@/lib/auth'
 
 export async function POST(req: Request) {
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
     try {
         const body = await req.json()
         

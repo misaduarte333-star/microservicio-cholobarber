@@ -19,17 +19,12 @@ COPY . .
 # Forzamos un límite bajo de RAM a Node (Max 1.5GB) para evitar un OOM Kill
 ENV NODE_OPTIONS="--max-old-space-size=1536"
 
-# IMPORTANTE: Next.js inyecta (quema) TODAS las variables "NEXT_PUBLIC_" en el código de 
-# interfaz (JS) durante EL BUILD (npm run build). Si ponemos valores falsos aquí, el cliente 
-# del navegador tratará de conectarse a esos falsos y crasheará.
-# Estas llaves "NEXT_PUBLIC" SON SEGURAS de exponer por diseño, no disparan advertencias de seguridad.
-ENV NEXT_PUBLIC_SUPABASE_URL=https://zzkryfmfoucxxmimrhyh.supabase.co
-ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6a3J5Zm1mb3VjeHhtaW1yaHloIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDY4MjI4OSwiZXhwIjoyMDg2MjU4Mjg5fQ.sGjaJYWmXfDVRXbFsta0eJ9Y7yW4hKTKuSpGfPASisE
-
-# Esta SÍ es secreta. No tiene el prefijo NEXT_PUBLIC_ así que no se quema en el código JS.
-# Le ponemos un string de mentira para que el SDK de Supabase no crashee con "supabaseKey is required"
-# durante el build. Easypanel la sobreescribirá en producción.
-ENV SUPABASE_SERVICE_ROLE_KEY="dummy-service-key-para-que-compile"
+# FIX: No quemar secrets reales en la imagen. Usar placeholders mínimos 
+# que el SDK acepta pero que son inútiles sin las env vars reales en runtime.
+# Estos se sobreescriben en producción por EasyPanel/docker-compose.
+ENV NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.placeholder
+ENV SUPABASE_SERVICE_ROLE_KEY=placeholder-service-key
 
 RUN npm run build
 

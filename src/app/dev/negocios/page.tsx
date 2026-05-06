@@ -35,7 +35,6 @@ export default function GestorNegocios() {
         agent_name: 'BarberBot',
         agent_personality: 'Friendly',
         agent_instance_name: '',
-        agent_instance_name: '',
         agent_evolution_key: '',
         agent_enabled: true,  // Webhook Evo
         agent_active: true,   // IA Bot

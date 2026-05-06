@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireDevAuth } from '@/lib/auth'
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -7,6 +8,9 @@ const supabase = createClient(
 )
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
     const { id } = await params
 
     const { data, error } = await supabase
@@ -23,6 +27,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
     const { id } = await params
     const body = await req.json()
 

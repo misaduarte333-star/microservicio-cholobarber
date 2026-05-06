@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireDevAuth } from '@/lib/auth'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -9,7 +10,10 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.
  * Devuelve la lista de admins y barberos para el panel dev.
  * Usa service role key para bypasear RLS.
  */
-export async function GET() {
+export async function GET(req: Request) {
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
     try {
         const supabase = createClient(supabaseUrl, supabaseServiceKey)
 

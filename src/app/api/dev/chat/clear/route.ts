@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { MemoryService } from '@/lib/ai/memory.service'
+import { requireDevAuth } from '@/lib/auth'
 
 export async function POST(req: Request) {
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
     try {
         const { sucursalId, phone } = await req.json()
 
@@ -9,7 +13,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Faltan parámetros: sucursalId o phone' }, { status: 400 })
         }
 
-        const sessionId = `${sucursalId}_${phone}`
+        // FIX: Usar el mismo formato de session ID que el webhook (colon, no underscore)
+        const sessionId = `${sucursalId}:${phone}`
         const history = await MemoryService.getChatHistory(sessionId)
         
         await history.clear()

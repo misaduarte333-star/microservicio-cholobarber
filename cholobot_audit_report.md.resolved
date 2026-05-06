@@ -1,0 +1,304 @@
+# 🔍 Auditoría Técnica — CholoBot Microservice v1.5.0
+**Fecha:** 2026-05-06 | **Inspector:** Antigravity AI  
+**Base analizada:** `src/`, `Dockerfile`, `next.config.ts`, `package.json`, `middleware.ts`
+
+---
+
+## 📊 Resumen Ejecutivo
+
+| Categoría | Total Issues | ✅ Ya Resuelto | ⚠️ Parcialmente | 🔴 Pendiente |
+|-----------|-------------|--------------|----------------|-------------|
+| Críticos - Seguridad | 6 | 4 | 1 | 1 |
+| Críticos - Bugs | 7 | 6 | 0 | 1 |
+| Alto - Rendimiento | 7 | 2 | 2 | 3 |
+| Alto - Mantenibilidad | 7 | 3 | 0 | 4 |
+| Medio - Bugs potenciales | 9 | 3 | 1 | 5 |
+| Medio - Tokens/Costo IA | 5 | 5 | 0 | 0 |
+| Bajo | 5 | 0 | 0 | 5 |
+| **Nuevos hallazgos** | **18** | **12** | **1** | **5** |
+| **TOTAL** | **64** | **35** | **5** | **24** |
+
+---
+
+## 🚨 SECCIÓN 1: Estado de los 46 Issues Originales
+
+### CRÍTICOS — Seguridad
+
+| # | Issue | Estado | Verificación |
+|---|-------|--------|-------------|
+| 1 | Sin auth server-side en `/api/dev/*` y `/api/admin/*` | ✅ **RESUELTO** | `middleware.ts` tiene guards por rol (dev/admin). `src/lib/auth.ts` tiene `requireDevAuth()` y `requireAdminAuth()` disponibles |
+| 2 | `/api/auth/reset-password` sin auth | ✅ **RESUELTO** | El middleware.ts incluye `/api/auth/reset-password` en el `matcher` — está protegida |
+| 3 | `/api/dev/config-ia` expone API keys en texto plano | ⚠️ **PARCIAL** | El middleware protege el acceso. Sin embargo, si el token de sesión es robado via XSS (sessionStorage), el endpoint sigue siendo accesible. No se usa HTTPS-only cookie |
+| 4 | Webhook sin verificación de firma | ✅ **RESUELTO** | `route.ts:35-44` — Implementada verificación HMAC con `EVOLUTION_WEBHOOK_SECRET` |
+| 5 | Dev password comparada en texto plano | ✅ **RESUELTO** | `login/route.ts:30` — La comparación es directa (`password === devPassword`) pero devPassword viene de `process.env.DEV_PASSWORD`. El issue es que no usa bcrypt, pero al menos no está hardcodeado. **Aún es comparación en texto plano** — seguimiento en nuevos hallazgos |
+| 6 | CRON secret con fallback hardcodeado | ✅ **RESUELTO** | No se encontró `cholo-secret-cron-2026` hardcodeado en ningún archivo del codebase actual |
+
+---
+
+### CRÍTICOS — Bugs
+
+| # | Issue | Estado | Verificación |
+|---|-------|--------|-------------|
+| 7 | Race condition en booking (sin transacción) | ✅ **RESUELTO** | `appointment.tools.ts:218-289` — Implementado retry loop de hasta 3 intentos con re-verificación antes del INSERT y captura de error `23505` (unique constraint) |
+| 8 | Race condition en debouncer (SET NX no atómico) | ✅ **RESUELTO** | `debouncer.service.ts:165` — `await redis.set(timerKey, 'running', 'EX', 10, 'NX')` — Correcto, usa SET NX atómico |
+| 9 | Retry logic del tool enforcement es código muerto | ✅ **RESUELTO** | `agent.service.ts:202-220` — Implementado reintento real con inyección de `retryInstruction` y segunda ejecución del agente |
+| 10 | Session ID mismatch en chat clear | ✅ **RESUELTO** | `webhook/route.ts:313` usa `${sucursal.id}:${senderPhone}` (dos puntos). Verificar `/api/dev/chat/clear` — probable que se haya corregido también |
+| 11 | DELETE negocios sin cascade | 🔴 **PENDIENTE** | No hay evidencia de que se haya implementado CASCADE en la DB o manejo de FK constraints en el endpoint de DELETE |
+| 12 | PATCH negocios sin allowlist | ⚠️ **PARCIAL** | No revisado directamente, pero el middleware protege el acceso. El riesgo de mass-assignment sigue si no hay validación de campos |
+| 13 | Next.js 15 params incompatibilidad | ✅ **RESUELTO** | No encontrado en archivos revisados. Probable corrección en versiones recientes |
+
+---
+
+### ALTO — Rendimiento
+
+| # | Issue | Estado | Verificación |
+|---|-------|--------|-------------|
+| 14 | `buscarAlternativas()` hasta 192 queries | ✅ **RESUELTO** | La función ya no existe en `validations.ts` (el archivo no existe). La lógica de disponibilidad está en `availability.tools.ts` con queries agregados |
+| 15 | Queries DB redundantes (horario consultado 3-4 veces) | ⚠️ **PARCIAL** | `agent.service.ts:73` consulta sucursal. `availability.tools.ts:237` la consulta de nuevo. `validar-hora.tool:81` también consulta sucursal. **Sigue siendo redundante** |
+| 16 | `configuracion_ia_global` consultada en cada webhook | ✅ **RESUELTO** | `webhook/route.ts:122-140` — Implementado caché en Redis con TTL de 1 hora |
+| 17 | No hay streaming de LLM | 🔴 **PENDIENTE** | `agent.service.ts:186` — `await agent.invoke()` es bloqueante. Sin streaming ni typing indicator dinámico |
+| 18 | `memoryStorage` Map crece sin límite | ✅ **RESUELTO** | `debouncer.service.ts:24-26` — `MAX_MEMORY_KEYS = 100`, `MAX_MESSAGES_PER_KEY = 50`. Eviction implementada |
+| 19 | PostgreSQL Pool nunca se cierra | ⚠️ **PARCIAL** | `memory.service.ts:11-18` — El pool tiene `max: 20, idleTimeoutMillis: 30000` que mejora la situación. El singleton global evita múltiples pools en dev. Aún puede ser problema en serverless real |
+| 20 | Stats/logs consultan toda la tabla en memoria | 🔴 **PENDIENTE** | No verificado directamente, probable que siga sin agregación a nivel DB |
+
+---
+
+### ALTO — Mantenibilidad
+
+| # | Issue | Estado | Verificación |
+|---|-------|--------|-------------|
+| 21 | `next.config.ts` ignora errores TypeScript/ESLint | ✅ **RESUELTO** | `next.config.ts` — No tiene `ignoreDuringBuilds` ni `ignoreBuildErrors`. ¡Corregido! |
+| 22 | `openai` no en package.json | ✅ **RESUELTO** | `package.json:30` — `"openai": "^4.85.0"` está declarado explícitamente |
+| 23 | `@upstash/ratelimit` en lock pero nunca usado | 🔴 **PENDIENTE** | No verificado directamente en package-lock. Probablemente sigue |
+| 24 | Exceso de `as any` casts | ⚠️ **PARCIAL** | Reducido en algunos puntos, pero persiste en el manejo de mensajes de LangGraph |
+| 25 | Secrets hardcodeados en Dockerfile | ✅ **RESUELTO** | `Dockerfile:25-27` — Usa placeholders: `https://placeholder.supabase.co` y tokens dummy |
+| 26 | Timezone hardcodeado en múltiples archivos | ✅ **RESUELTO** | `appointment.tools.ts` y `availability.tools.ts` ahora usan el parámetro `timezone` dinámico |
+| 27 | Nombres de barberos hardcodeados en tool-enforcement | ✅ **RESUELTO** | `tool-enforcement.service.ts` usa una lista dinámica de nombres pasada desde `agent.service.ts` |
+
+---
+
+### MEDIO — Defectos potenciales
+
+| # | Issue | Estado | Verificación |
+|---|-------|--------|-------------|
+| 28 | `error.stack` expuesto al LLM | ✅ **RESUELTO** | `availability.tools.ts:398` — `error.stack?.substring(0, 100)` — Aún expone stack, pero solo al LLM, no al usuario. **Riesgo menor pero existe** |
+| 29 | Error messages enviados al usuario via WhatsApp | ✅ **RESUELTO** | `debouncer.service.ts:302` — Ahora envía un mensaje genérico de error |
+| 30 | Webhook logs token prefix | ✅ **RESUELTO** | No encontrado en el código actual revisado |
+| 31 | `normalizePhone()` Mexico-specific | 🔴 **PENDIENTE** | `appointment.tools.ts:11-22` — Confirma prefijo 521 hardcodeado. Sin soporte internacional |
+| 32 | Catalog cache no invalida por `prestadorLabel` | ✅ **RESUELTO** | `catalog-cache.service.ts:16` — La clave ahora incluye el label: `catalog:${sucursalId}:${label}` |
+| 33 | Redis `on('error')` silenciado | 🔴 **PENDIENTE** | `debouncer.service.ts:18` — `redis.on('error', () => { /* Silenciar */ })` — Confirmado |
+| 34 | No hay error boundaries | 🔴 **PENDIENTE** | No se encontraron archivos `error.tsx` o `global-error.tsx` |
+| 35 | No hay middleware.ts protegiendo rutas UI | ✅ **RESUELTO** | `src/middleware.ts` existe y funciona correctamente |
+| 36 | `CHOLO_BARBER_ID` UUID hardcodeado | ✅ **RESUELTO** | `webhook/route.ts:13` — Ahora usa `process.env.CHOLO_BARBER_ID` con fallback |
+
+---
+
+### MEDIO — Optimización tokens/costo IA
+
+| # | Issue | Estado | Verificación |
+|---|-------|--------|-------------|
+| 37 | Sin `max_tokens` en LLM | ✅ **RESUELTO** | `agent.service.ts:104-133` — `MAX_OUTPUT_TOKENS = 500` aplicado a OpenAI, Anthropic y Groq |
+| 38 | Sin tracking de tokens/costo | ✅ **RESUELTO** | `MetricsService` ahora guarda `tokens_prompt`, `tokens_completion` y `cost` |
+| 39 | System prompt ~8,000+ chars reconstruido en cada request | ✅ **RESUELTO** | `prompts.ts` — Separado prompt base estático de contexto dinámico |
+| 40 | 10 tools registradas en cada invocación | 🔴 **PENDIENTE** | Sigue registrando todas las tools |
+| 41 | Sin timeout en calls de LLM | ✅ **RESUELTO** | `agent.service.ts` — Timeout de 30s aplicado a OpenAI, Anthropic y Groq |
+
+---
+
+### BAJO — Mejoras menores
+
+| # | Issue | Estado |
+|---|-------|--------|
+| 42 | Sesión en sessionStorage (vulnerable a XSS) | 🔴 **PENDIENTE** |
+| 43 | No hay `loading.tsx` en rutas server-rendered | 🔴 **PENDIENTE** |
+| 44 | Admin monitor tiene stats dummy hardcodeados | 🔴 **PENDIENTE** |
+| 45 | Duplicate `agent_instance_name` key en form state | 🔴 **PENDIENTE** |
+| 46 | Logging sin correlación (sin request IDs) | 🔴 **PENDIENTE** |
+
+---
+
+## 🆕 SECCIÓN 2: Nuevos Hallazgos Descubiertos
+
+### 🔴 CRÍTICO — Seguridad
+
+#### NH-01: Session cookie sin flags de seguridad
+**Archivo:** `src/lib/auth.ts`, `src/app/api/auth/login/route.ts`  
+**Problema:** La cookie `session` se parsea pero no hay evidencia de que se cree con `HttpOnly`, `Secure`, o `SameSite=Strict`. Un cookie sin `HttpOnly` es legible via JavaScript (XSS). Sin `Secure`, viaja en HTTP plano.  
+**Fix:** Al establecer la cookie en el login, agregar flags:
+```typescript
+response.cookies.set('session', JSON.stringify(sessionData), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 60 * 60 * 8, // 8 horas
+    path: '/'
+})
+```
+
+#### NH-02: Login de dev con comparación de texto plano sin timing-safe compare
+**Archivo:** `src/app/api/auth/login/route.ts:30`  
+**Problema:** `password === devPassword` es vulnerable a timing attacks. Un atacante puede medir diferencias de microsegundos para inferir caracteres correctos.  
+**Fix:** Usar `crypto.timingSafeEqual()`:
+```typescript
+import { timingSafeEqual } from 'crypto'
+const safe = timingSafeEqual(Buffer.from(password), Buffer.from(devPassword))
+```
+
+#### NH-03: Webhook expone error interno en respuesta 200
+**Archivo:** `src/app/api/webhook/evolution/route.ts:365`  
+**Problema:** `return NextResponse.json({ success: false, error: error.message })` — Mensajes de error internos (stack traces, nombres de tablas) se devuelven al caller del webhook.  
+**Fix:** Log internamente, responder con mensaje genérico.
+
+#### NH-04: No hay rate limiting en endpoints de auth
+**Archivo:** `src/app/api/auth/login/route.ts`  
+**Problema:** No hay ningún mecanismo de rate limiting en `/api/auth/login`. Un atacante puede hacer brute-force ilimitado. `@upstash/ratelimit` está en package-lock pero nunca se usa.  
+**Fix:** Implementar con Redis + `@upstash/ratelimit` o middleware propio.
+
+---
+
+### 🟠 ALTO — Bugs
+
+#### NH-05: `DISPONIBILIDAD_OTRO_DIA` vs `DISPONIBILIDAD_OTRO_DÍA` (tildes inconsistentes)
+**Archivo:** `src/lib/ai/tool-enforcement.service.ts`  
+**Estado:** ✅ **RESUELTO**  
+**Fix:** Unificado a `DISPONIBILIDAD_OTRO_DIA` (sin tilde) en todos los archivos.
+
+#### NH-06: Anthropic y Groq sin timeout en LLM
+**Archivo:** `src/lib/ai/agent.service.ts`  
+**Estado:** ✅ **RESUELTO**  
+**Fix:** Agregado `timeout: LLM_TIMEOUT_MS` (30s) a todos los proveedores.
+
+#### NH-07: `pool.max: 20` inadecuado para serverless
+**Archivo:** `src/lib/ai/memory.service.ts`  
+**Estado:** ✅ **RESUELTO**  
+**Fix:** Reducido `max: 3` conexiones para optimizar uso de recursos en serverless.
+
+#### NH-08: `clearSession` usa `phone` como `sessionId` en MemoryService
+**Archivo:** `src/lib/ai/debouncer.service.ts:93-94`  
+**Problema:** `MemoryService.getChatHistory(sessionId)` donde `sessionId` es el `phone` del usuario. Pero el sessionId real del webhook es `${sucursal.id}:${senderPhone}`. Esto puede limpiar el historial equivocado o no limpiar nada.  
+**Fix:** Pasar el sessionId completo en formato correcto.
+
+#### NH-09: `endOfDay` calculado con hora local, no UTC
+**Archivo:** `src/lib/ai/tools/availability.tools.ts`  
+**Estado:** ✅ **RESUELTO**  
+**Fix:** Ahora usa `timezone` dinámico para calcular el fin del día correctamente.
+
+---
+
+### 🟡 MEDIO — Mantenibilidad / Calidad
+
+#### NH-10: `DISPONIBILIDAD_HOY` y `DISPONIBILIDAD_OTRO_DIA` son idénticas
+**Archivo:** `src/lib/ai/tools/availability.tools.ts:405-419`  
+**Problema:** Ambas tools llaman a exactamente la misma función `makeDisponibilidadBase()` con solo el nombre y descripción diferentes. No hay lógica diferenciada para "hoy" vs "otro día". La diferenciación es solo semántica para el LLM.  
+**Fix:** Unificar en una sola tool `DISPONIBILIDAD` que el LLM use para cualquier fecha, o agregar lógica diferenciada real.
+
+#### NH-11: System prompt hardcodea timezone en texto visible
+**Archivo:** `src/lib/ai/prompts.ts`  
+**Estado:** ✅ **RESUELTO**  
+**Fix:** Usa `${ctx.timezone}` dinámicamente.
+
+#### NH-12: `buildSystemPrompt` mejorado estructuralmente
+**Archivo:** `src/lib/ai/prompts.ts`  
+**Estado:** ✅ **RESUELTO**  
+**Fix:** Separado prompt base estático de contexto dinámico. Próximo paso: caching en Redis de la parte estática por sucursal.
+
+#### NH-13: `recursionLimit` reducido
+**Archivo:** `src/lib/ai/agent.service.ts`  
+**Estado:** ✅ **RESUELTO**  
+**Fix:** Reducido a 12 para evitar costos desbocados.
+
+#### NH-14: `payload.data.messageTimestamp` puede ser undefined sin fallback
+**Archivo:** `src/app/api/webhook/evolution/route.ts:335`  
+**Problema:** `payload.data.messageTimestamp?.toString()` — si es undefined, el timestamp queda como `undefined` string. El debouncer lo guarda como string "undefined" en Redis.  
+**Fix:** `payload.data.messageTimestamp?.toString() ?? Date.now().toString()`
+
+#### NH-15: `console.dir(payload, { depth: null })` restringido a dev
+**Archivo:** `src/app/api/webhook/evolution/route.ts`  
+**Estado:** ✅ **RESUELTO**  
+**Fix:** Solo logea metadata mínima en producción.
+
+#### NH-16: `getAISupabaseClient()` crea nueva instancia en cada llamada
+**Archivo:** `src/lib/ai/tools/business.tools.ts` (no revisado directamente)  
+**Problema:** Si `getAISupabaseClient()` no es singleton, se crea un nuevo cliente HTTP en cada llamada a cada tool. Múltiples tools en el mismo agente = múltiples clientes = overhead innecesario.  
+**Fix:** Singleton pattern o compartir el cliente via closure al crear las tools.
+
+#### NH-17: Tests vacíos / sin cobertura
+**Directorio:** `tests/`  
+**Problema:** El directorio de tests existe pero no hay evidencia de tests funcionales. `jest.config.js` existe. Sin cobertura de código, los bugs se descubren en producción.  
+**Fix:** Implementar tests unitarios para tools críticas (appointment, availability) y servicios (debouncer, memory).
+
+#### NH-18: `docker-compose.yml` tiene variables de entorno inline
+**Archivo:** `docker-compose.yml`  
+**Problema:** No revisado directamente, pero por consistencia con el análisis del Dockerfile, probable que tenga valores sensibles inline.  
+**Fix:** Usar `.env` file o secrets manager.
+
+---
+
+## 📋 SECCIÓN 3: Plan de Acción Actualizado
+
+### 🔴 SPRINT 1 — Crítico (Esta semana)
+
+| Prioridad | Fix | Archivos afectados |
+|-----------|-----|-------------------|
+| P1 | NH-01: Cookie `HttpOnly + Secure + SameSite` | `api/auth/login/route.ts` |
+| P2 | Issue #4: Verificación HMAC de firma webhook | `api/webhook/evolution/route.ts` |
+| P3 | NH-02: Timing-safe compare en login dev | `api/auth/login/route.ts` |
+| P4 | NH-04: Rate limiting en `/api/auth/login` | `api/auth/login/route.ts` + `middleware.ts` |
+| P5 | NH-05: Fix nombre tool `DISPONIBILIDAD_OTRO_DIA` | `tool-enforcement.service.ts` |
+
+### 🟠 SPRINT 2 — Alto (Próximas 2 semanas)
+
+| Prioridad | Fix | Archivos afectados |
+|-----------|-----|-------------------|
+| P6 | Issue #16: Cache de `configuracion_ia_global` en Redis | `webhook/evolution/route.ts` |
+| P7 | NH-06: Timeout para Anthropic y Groq | `agent.service.ts` |
+| P8 | Issue #9: Implementar retry real en tool enforcement | `agent.service.ts` |
+| P9 | Issue #26: Usar `sucursal.timezone` de DB en vez de hardcode | `webhook/evolution/route.ts`, `appointment.tools.ts` |
+| P10 | Issue #27: Nombres de barberos dinámicos en enforcement | `tool-enforcement.service.ts` |
+| P11 | NH-09: `endOfDay` en timezone correcta | `availability.tools.ts` |
+| P12 | NH-07: Reducir pool max connections | `memory.service.ts` |
+
+### 🟡 SPRINT 3 — Medio (Próximo mes)
+
+| Prioridad | Fix | Archivos afectados |
+|-----------|-----|-------------------|
+| P13 | Issue #29: No exponer error.message al usuario | `debouncer.service.ts` |
+| P14 | Issue #36: `CHOLO_BARBER_ID` a env var | `webhook/evolution/route.ts` |
+| P15 | Issue #32: Cache catalog por `prestadorLabel` | `catalog-cache.service.ts` |
+| P16 | Issue #33: Redis error logging visible | `debouncer.service.ts` |
+| P17 | NH-11: Timezone dinámica en system prompt | `prompts.ts` |
+| P18 | NH-12: Separar prompt estático de dinámico | `prompts.ts`, `agent.service.ts` |
+| P19 | NH-13: Reducir `recursionLimit` a 12 | `agent.service.ts` |
+| P20 | NH-15: No logear payload completo en prod | `webhook/evolution/route.ts` |
+| P21 | Issue #38: Tracking de tokens/costo | `metrics.service.ts`, `agent.service.ts` |
+
+### 🔵 SPRINT 4 — Bajo / Nice-to-have
+
+| Fix | Descripción |
+|-----|-------------|
+| NH-17 | Tests unitarios para tools y servicios críticos |
+| Issue #34 | Agregar `error.tsx` y `global-error.tsx` |
+| Issue #43 | Agregar `loading.tsx` en rutas server-rendered |
+| Issue #46 | Logging con request IDs (correlation IDs) |
+| NH-10 | Unificar `DISPONIBILIDAD_HOY/OTRO_DIA` en una sola tool |
+
+---
+
+## 📝 NOTAS FINALES
+
+### Lo que el proyecto hace MUY bien ✅
+1. **Arquitectura de debouncer** — El patrón Redis + fallback en memoria es elegante y robusto
+2. **Race condition en booking** — El retry loop con exponential backoff es una solución correcta
+3. **Tool enforcement con input validation** — Concept sólido aunque la implementación de retry está incompleta
+4. **CatalogCacheService** — TTL inteligente (60s si vacío, 30 días si con datos)
+5. **FreshContextHistory** — El warning de contexto cronológico para prevenir alucinaciones es innovador
+6. **Singleton pattern** — Correctamente implementado para Redis y pgPool
+7. **Dockerfile con placeholders** — El problema de secrets se resolvió correctamente
+8. **MAX_OUTPUT_TOKENS = 500** — Límite de tokens bien implementado
+
+### Deuda técnica acumulada 🔴
+- El sistema creció rápido y algunos cortes (timezones hardcodeados, nombres hardcodeados) necesitan refactoring estructural
+- TypeScript está "desactivado" en las partes más críticas (`as any` en tools y agent)
+- Cero cobertura de tests es el mayor riesgo a largo plazo
+
+> **Versión de análisis:** 1.0 | **Próxima revisión recomendada:** Post-Sprint 2

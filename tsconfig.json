@@ -40,6 +40,7 @@
         "temp_microservice_old",
         "test_avail.ts",
         "scratch",
-        "test-prompt-fix.ts"
+        "test-prompt-fix.ts",
+        "tests"
     ]
 }

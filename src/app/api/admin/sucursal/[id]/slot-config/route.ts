@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAdminAuth } from '@/lib/auth'
 
 /**
  * PATCH /api/admin/sucursal/[id]/slot-config
- * 
+ *
  * Configura el modo de carga de slots para una sucursal.
- * 
+ *
  * Body:
  * {
  *   "slot_booking_mode": "fixed_30min" | "fixed_1hour" | "by_service"
@@ -13,15 +14,18 @@ import { createClient } from '@supabase/supabase-js'
  */
 export async function PATCH(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
+    const auth = await requireAdminAuth(request)
+    if (!auth.authenticated) return auth.response!
+
+    const { id } = await params
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
     try {
-        const { id } = params
         const { slot_booking_mode } = await request.json()
 
         if (!id) {
@@ -76,15 +80,18 @@ export async function PATCH(
  */
 export async function GET(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
+    const auth = await requireAdminAuth(request)
+    if (!auth.authenticated) return auth.response!
+
+    const { id } = await params
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
     try {
-        const { id } = params
 
         if (!id) {
             return NextResponse.json({ error: 'Falta ID de sucursal' }, { status: 400 })

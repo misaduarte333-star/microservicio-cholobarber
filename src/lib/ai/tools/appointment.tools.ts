@@ -2,8 +2,6 @@ import { DynamicStructuredTool } from '@langchain/core/tools'
 import { z } from 'zod'
 import { toDate, formatInTimeZone } from 'date-fns-tz'
 import { getAISupabaseClient } from './business.tools'
-import { APP_TIMEZONE } from '../../timezone'
-
 /**
  * Normaliza un número de teléfono de WhatsApp/Evolution API.
  * Principalmente enfocado en México: 521XXXXXXXXXX -> 52XXXXXXXXXX
@@ -79,7 +77,7 @@ export const makeBuscarOCrearClienteTool = (sucursalId: string) => {
 /**
  * Trae las citas activas del cliente con nombres resueltos.
  */
-export const makeMisCitasTool = (sucursalId: string) => {
+export const makeMisCitasTool = (sucursalId: string, timezone: string) => {
     return new DynamicStructuredTool({
         name: 'MIS_CITAS',
         description:
@@ -119,8 +117,8 @@ export const makeMisCitasTool = (sucursalId: string) => {
                     timestamp_inicio: c.timestamp_inicio,
                     timestamp_fin: c.timestamp_fin,
                     // Añadimos formatos locales para que el agente no se confunda con UTC
-                    inicio_local: formatInTimeZone(new Date(c.timestamp_inicio), APP_TIMEZONE, 'yyyy-MM-dd HH:mm'),
-                    fin_local: formatInTimeZone(new Date(c.timestamp_fin), APP_TIMEZONE, 'yyyy-MM-dd HH:mm'),
+                    inicio_local: formatInTimeZone(new Date(c.timestamp_inicio), timezone, 'yyyy-MM-dd HH:mm'),
+                    fin_local: formatInTimeZone(new Date(c.timestamp_fin), timezone, 'yyyy-MM-dd HH:mm'),
                     estado: c.estado,
                     notas: c.notas
                 }))
@@ -136,7 +134,7 @@ export const makeMisCitasTool = (sucursalId: string) => {
 /**
  * Agenda una cita en Supabase. Incluye upsert de cliente.
  */
-export const makeAgendarCitaTool = (sucursalId: string) => {
+export const makeAgendarCitaTool = (sucursalId: string, timezone: string) => {
     return new DynamicStructuredTool({
         name: 'AGENDAR_CITA',
         description:
@@ -195,12 +193,12 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
 
                 const phoneClean = normalizePhone(cliente_telefono)
 
-                // Interpretar timestamps como hora local de Hermosillo (UTC-7)
+                // Interpretar timestamps como hora local de la sucursal
                 // new Date(strSinOffset) en Node.js los trataría como UTC, causando error de -7h
                 // toDate de date-fns-tz los convierte correctamente a UTC para Supabase
                 const stripOffset = (ts: string) => ts.replace(/([+-]\d{2}:\d{2}|Z)$/, '')
-                const tsInicio = toDate(stripOffset(timestamp_inicio), { timeZone: APP_TIMEZONE })
-                const tsFin    = toDate(stripOffset(timestamp_fin),    { timeZone: APP_TIMEZONE })
+                const tsInicio = toDate(stripOffset(timestamp_inicio), { timeZone: timezone })
+                const tsFin    = toDate(stripOffset(timestamp_fin),    { timeZone: timezone })
 
                 const insertPayload = {
                     sucursal_id: sucursalId,
@@ -215,73 +213,81 @@ export const makeAgendarCitaTool = (sucursalId: string) => {
                     origen: 'whatsapp' as const
                 }
 
-                const { data, error: conflictError } = await supabase
-                    .from('citas')
-                    .select('id, timestamp_inicio, timestamp_fin')
-                    .eq('barbero_id', barbero_id)
-                    .eq('sucursal_id', sucursalId)
-                    .in('estado', ['confirmada', 'pendiente'])
-                    .lt('timestamp_inicio', tsFin.toISOString())
-                    .gt('timestamp_fin', tsInicio.toISOString())
-                    .limit(1)
-                    .maybeSingle()
+                // FIX: Retry loop para manejar race conditions de forma más robusta
+                // Intentar hasta 3 veces con verificación de conflicto inmediata antes del insert
+                const MAX_RETRIES = 3
+                let lastError: any = null
 
-                if (conflictError) throw conflictError
+                for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+                    // Re-verificar disponibilidad justo antes del insert
+                    const { data: conflictData, error: recheckError } = await supabase
+                        .from('citas')
+                        .select('id, timestamp_inicio, timestamp_fin')
+                        .eq('barbero_id', barbero_id)
+                        .eq('sucursal_id', sucursalId)
+                        .in('estado', ['confirmada', 'pendiente'])
+                        .lt('timestamp_inicio', tsFin.toISOString())
+                        .gt('timestamp_fin', tsInicio.toISOString())
+                        .limit(1)
+                        .maybeSingle()
 
-                if (data) {
-                    return JSON.stringify({
-                        status: 'error',
-                        error: 'BARBERO_NO_DISPONIBLE',
-                        instruccion_para_agente: 'El barbero ya tiene una cita en ese horario. Llama a DISPONIBILIDAD_HOY para encontrar el siguiente slot libre y ofrécelo al cliente.',
-                        slot_ocupado: { inicio: data.timestamp_inicio, fin: data.timestamp_fin }
-                    })
-                }
+                    if (recheckError) throw recheckError
 
-                const { data: insertData, error } = await supabase
-                    .from('citas')
-                    .insert([insertPayload])
-                    .select('id, sucursal_id, barbero_id, servicio_id, cliente_id, cliente_nombre, cliente_telefono, timestamp_inicio, timestamp_fin, estado, origen')
-                    .single()
-
-                if (error) {
-                    if (error.code === '23505' || error.message.includes('unique')) {
+                    if (conflictData) {
                         return JSON.stringify({
                             status: 'error',
-                            error_code: 'SLOT_OCUPADO',
-                            instruccion_para_agente: 'Ese horario acaba de ser tomado por otra persona. Discúlpate y ofrece buscar otro horario o barbero.',
-                            payload_intentado: insertPayload
+                            error: 'BARBERO_NO_DISPONIBLE',
+                            instruccion_para_agente: 'El barbero ya tiene una cita en ese horario. Llama a DISPONIBILIDAD_HOY para encontrar el siguiente slot libre y ofrécelo al cliente.',
+                            slot_ocupado: { inicio: conflictData.timestamp_inicio, fin: conflictData.timestamp_fin }
                         })
                     }
+
+                    const { data: insertData, error } = await supabase
+                        .from('citas')
+                        .insert([insertPayload])
+                        .select('id, sucursal_id, barbero_id, servicio_id, cliente_id, cliente_nombre, cliente_telefono, timestamp_inicio, timestamp_fin, estado, origen')
+                        .single()
+
+                    if (error) {
+                        // Si es unique constraint, otro request ganó la carrera - reintentar
+                        if (error.code === '23505' || error.message.includes('unique')) {
+                            lastError = error
+                            if (attempt < MAX_RETRIES - 1) {
+                                // Pequeña espera exponencial antes de reintentar
+                                await new Promise(r => setTimeout(r, 100 * Math.pow(2, attempt)))
+                                continue
+                            }
+                            return JSON.stringify({
+                                status: 'error',
+                                error_code: 'SLOT_OCUPADO',
+                                instruccion_para_agente: 'Ese horario acaba de ser tomado por otra persona. Discúlpate y ofrece buscar otro horario o barbero.',
+                                payload_intentado: insertPayload
+                            })
+                        }
+                        throw error
+                    }
+
+                    // Insert exitoso - salir del loop
+                    const { formatInTimeZone } = await import('date-fns-tz')
+                    const timestampInicioLocal = formatInTimeZone(insertData.timestamp_inicio, timezone, "yyyy-MM-dd'T'HH:mm:ss")
+                    const timestampFinLocal = formatInTimeZone(insertData.timestamp_fin, timezone, "yyyy-MM-dd'T'HH:mm:ss")
+
                     return JSON.stringify({
-                        status: 'error',
-                        error_code: error.code,
-                        message: error.message,
-                        details: error.details,
-                        hint: error.hint,
-                        payload_intentado: insertPayload
+                        status: 'ok',
+                        cita: {
+                            ...insertData,
+                            timestamp_inicio_utc: insertData.timestamp_inicio,
+                            timestamp_fin_utc: insertData.timestamp_fin,
+                            timestamp_inicio: timestampInicioLocal,
+                            timestamp_fin: timestampFinLocal,
+                            aviso_para_ia: `La cita fue agendada exitosamente para la fecha/hora: ${timestampInicioLocal} (hora local). Confírmale al cliente esta fecha y hora EXACTA.`
+                        },
+                        _databaseInteraction: 'citas'
                     })
                 }
-
-                // Supabase retorna los timestamps en UTC (ej: 2026-05-02T00:00:00+00:00 para las 17:00 en Hermosillo).
-                // Formateamos esto de vuelta a la hora local para que la IA no se confunda y diga "mañana" por error.
-                const { formatInTimeZone } = await import('date-fns-tz')
-                const timestampInicioLocal = formatInTimeZone(insertData.timestamp_inicio, APP_TIMEZONE, "yyyy-MM-dd'T'HH:mm:ss")
-                const timestampFinLocal = formatInTimeZone(insertData.timestamp_fin, APP_TIMEZONE, "yyyy-MM-dd'T'HH:mm:ss")
-
-                return JSON.stringify({
-                    status: 'ok',
-                    cita: {
-                        ...insertData,
-                        timestamp_inicio_utc: insertData.timestamp_inicio,
-                        timestamp_fin_utc: insertData.timestamp_fin,
-                        timestamp_inicio: timestampInicioLocal,
-                        timestamp_fin: timestampFinLocal,
-                        aviso_para_ia: `La cita fue agendada exitosamente para la fecha/hora: ${timestampInicioLocal} (hora local). Confírmale al cliente esta fecha y hora EXACTA.`
-                    },
-                    _databaseInteraction: 'citas'
-                })
             } catch (error: any) {
-                return JSON.stringify({ status: 'error', message: error.message, stack: error.stack?.substring(0, 200) })
+                console.error('[AGENDAR_CITA] Error:', error)
+                return JSON.stringify({ status: 'error', message: 'Error interno al agendar la cita' })
             }
         }
     })

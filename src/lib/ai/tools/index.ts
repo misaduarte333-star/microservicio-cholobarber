@@ -16,8 +16,8 @@ export function makeAllTools(sucursalId: string, timezone: string = 'America/Her
 
         // Gestión de citas y CRM (tiempo real)
         makeBuscarOCrearClienteTool(sucursalId),
-        makeMisCitasTool(sucursalId),
-        makeAgendarCitaTool(sucursalId),
+        makeMisCitasTool(sucursalId, timezone),
+        makeAgendarCitaTool(sucursalId, timezone),
         makeCancelarCitaTool(sucursalId),
 
         // Consulta de negocio (fallback si datos pre-cargados no son suficientes)

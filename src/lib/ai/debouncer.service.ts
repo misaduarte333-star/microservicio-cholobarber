@@ -15,11 +15,14 @@ export const redis = globalForRedis.redis ?? new Redis(process.env.AGENT_REDIS_U
     enableOfflineQueue: false     // No encolar comandos si está desconectado
 })
 
-redis.on('error', () => { /* Silenciar logs de error para no saturar terminal */ })
+redis.on('error', (err) => { console.error('[Redis Error]', err.message) })
 
 if (process.env.NODE_ENV !== 'production') globalForRedis.redis = redis
 
 // Storage temporal en memoria si Redis falla
+// FIX: Limitar el tamaño para evitar memory leak
+const MAX_MEMORY_KEYS = 100
+const MAX_MESSAGES_PER_KEY = 50
 const memoryStorage = new Map<string, string[]>()
 const memoryTimer = new Set<string>()
 
@@ -157,9 +160,10 @@ export class DebouncerService {
         if (redis.status === 'ready') {
             try {
                 await redis.rpush(listKey, JSON.stringify(msg))
-                const hasTimer = await redis.get(timerKey)
-                if (!hasTimer) {
-                    await redis.set(timerKey, 'running', 'EX', 10)
+                // FIX: Usar SET NX (set if not exists) para evitar race condition
+                // El comando set con 'NX' es atómico: solo establece si la clave no existe
+                const setResult = await redis.set(timerKey, 'running', 'EX', 10, 'NX')
+                if (setResult === 'OK') {
                     setTimeout(() => this.processBuffer(msg.senderPhone, msg.context, msg.remoteJid), timeoutMs)
                 }
                 return
@@ -169,8 +173,23 @@ export class DebouncerService {
         }
 
         // Fallback a Memoria
+        // FIX: Eviction si el mapa crece demasiado
+        if (memoryStorage.size >= MAX_MEMORY_KEYS) {
+            const oldestKey = memoryStorage.keys().next().value
+            if (oldestKey) {
+                memoryStorage.delete(oldestKey)
+                memoryTimer.delete(oldestKey.replace('buffer:', 'timer:'))
+                console.warn('[Debouncer] Memory storage full, evicting oldest:', oldestKey)
+            }
+        }
+
         if (!memoryStorage.has(listKey)) memoryStorage.set(listKey, [])
-        memoryStorage.get(listKey)!.push(JSON.stringify(msg))
+        const queue = memoryStorage.get(listKey)!
+        if (queue.length < MAX_MESSAGES_PER_KEY) {
+            queue.push(JSON.stringify(msg))
+        } else {
+            console.warn('[Debouncer] Message queue full for', listKey)
+        }
 
         if (!memoryTimer.has(timerKey)) {
             memoryTimer.add(timerKey)
@@ -279,8 +298,8 @@ export class DebouncerService {
             console.error('[Debouncer] AI CRITICAL ERROR:', error)
             const errorMsg = error.message || 'Error desconocido'
             if (evoEndpoint) {
-                // Durante diagnóstico, enviamos un mensaje un poco más detallado si es posible o al menos el error en el log
-                await this.sendEvolutionMessage(evoEndpoint, evoToken, remoteJid, `⚠️ Error de conexión con la IA: ${errorMsg.substring(0, 100)}. Por favor, contacta a soporte.`)
+                // Nunca enviar detalles del error técnico al usuario por seguridad
+                await this.sendEvolutionMessage(evoEndpoint, evoToken, remoteJid, `⚠️ En este momento no puedo procesar tu solicitud debido a una interrupción del sistema. Por favor, intenta de nuevo en unos minutos.`)
             }
         }
     }

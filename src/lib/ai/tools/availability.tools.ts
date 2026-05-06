@@ -292,9 +292,8 @@ function makeDisponibilidadBase(sucursalId: string, toolName: string, descriptio
                 }
 
                 // 2. Traer todas las citas y bloqueos desde el slot actual hasta el fin del día
-                const endOfDay = new Date(dateStart)
-                endOfDay.setHours(23, 59, 59, 999)
-                const isoEndOfDay = endOfDay.toISOString()
+                const dateStr = formatInTimeZone(dateStart, timezone, 'yyyy-MM-dd')
+                const isoEndOfDay = toDate(`${dateStr}T23:59:59.999`, { timeZone: timezone }).toISOString()
 
                 const { data: citasFuturas } = await supabase
                     .from('citas')

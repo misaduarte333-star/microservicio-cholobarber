@@ -62,6 +62,7 @@ export interface Sucursal {
     llm_provider: 'openai' | 'anthropic' | 'groq' | null
     llm_model: string | null
     agent_enabled: boolean
+    agent_active: boolean
     tipo_prestador: string | null
     tipo_prestador_label: string | null
     recordatorios_activos: boolean

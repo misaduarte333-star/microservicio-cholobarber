@@ -19,6 +19,10 @@ export interface RequestLog {
     toolsUsed: ToolStep[]
     error?: string
     source: 'webhook' | 'chat'
+    tokensPrompt?: number
+    tokensCompletion?: number
+    tokensTotal?: number
+    cost?: number
 }
 
 import { getAISupabaseClient } from './tools/business.tools'
@@ -41,6 +45,10 @@ export class MetricsService {
             tools_used: JSON.parse(JSON.stringify(log.toolsUsed)),
             error: log.error || null,
             source: log.source,
+            tokens_prompt: log.tokensPrompt || null,
+            tokens_completion: log.tokensCompletion || null,
+            tokens_total: log.tokensTotal || null,
+            cost: log.cost || null,
         }]).then(({ error }: { error: any }) => {
             if (error) console.error('[MetricsService] Error insertando log en Supabase:', error.message)
         })

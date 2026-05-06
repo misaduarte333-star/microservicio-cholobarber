@@ -10,8 +10,13 @@ export const dynamic = 'force-dynamic'
 /**
  * Endpoint de salud del sistema.
  * Verifica la conectividad y latencia de Redis, Postgres, Supabase y Evolution API.
+ * NOTA: Este endpoint es público intencionalmente para health checks de infraestructura (EasyPanel, load balancers).
+ * Si se quiere proteger, descomentar la verificación de auth abajo.
  */
 export async function GET(req: NextRequest) {
+    // Health check público para infraestructura. Si deseas protegerlo:
+    // const auth = await requireAdminAuth(req)
+    // if (!auth.authenticated) return auth.response!
     const results = {
         redis: { status: 'down', latency: 0, error: null as string | null },
         postgres: { status: 'down', latency: 0, error: null as string | null },

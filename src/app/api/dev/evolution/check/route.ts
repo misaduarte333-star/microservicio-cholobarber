@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase'
+import { requireDevAuth } from '@/lib/auth'
+import type { ConfigIA } from '@/lib/types.config-ia'
 
 export async function POST(req: NextRequest) {
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
     try {
         const { instanceName, evolutionKey } = await req.json()
 
@@ -10,7 +15,8 @@ export async function POST(req: NextRequest) {
         }
 
         const supabase = createClient()
-        const { data: config } = await supabase.from('configuracion_ia_global').select('*').eq('id', 1).single()
+        const { data: rawConfig } = await supabase.from('configuracion_ia_global').select('*').eq('id', 1).single()
+        const config = rawConfig as ConfigIA | null
 
         if (!config || !config.evolution_api_url) {
             return NextResponse.json({ error: 'Configuración global de Evolution no encontrada' }, { status: 500 })
@@ -30,9 +36,9 @@ export async function POST(req: NextRequest) {
         }
 
         const data = await res.json()
-        
-        return NextResponse.json({ 
-            success: true, 
+
+        return NextResponse.json({
+            success: true,
             state: data.instance?.state || 'UNKNOWN',
             status: data.instance?.status || 'UNKNOWN'
         })

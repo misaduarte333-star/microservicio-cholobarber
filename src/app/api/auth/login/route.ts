@@ -1,9 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
+import { timingSafeEqual } from 'crypto'
+import { checkRateLimit } from '@/lib/ratelimit'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+function setSessionCookie(response: NextResponse, sessionData: any) {
+    response.cookies.set('session', JSON.stringify(sessionData), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 60 * 60 * 8, // 8 horas
+        path: '/'
+    })
+    return response
+}
+
+function secureCompare(a: string, b: string): boolean {
+    const aBuf = Buffer.from(a)
+    const bBuf = Buffer.from(b)
+    if (aBuf.length !== bBuf.length) return false
+    return timingSafeEqual(aBuf, bBuf)
+}
 
 /**
  * POST /api/auth/login
@@ -14,6 +34,12 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
  */
 export async function POST(req: NextRequest) {
     try {
+        const ip = req.headers.get('x-forwarded-for') || '127.0.0.1'
+        const rl = await checkRateLimit(`login:${ip}`, 5, 60) // 5 intentos por minuto
+        if (!rl.allowed) {
+            return NextResponse.json({ error: 'Demasiados intentos. Intente nuevamente más tarde.' }, { status: 429, headers: { 'Retry-After': rl.retryAfterS.toString() } })
+        }
+
         const { identifier, password } = await req.json()
 
         if (!identifier || !password) {
@@ -27,13 +53,14 @@ export async function POST(req: NextRequest) {
         const devEmail = process.env.DEV_EMAIL?.toLowerCase()
         const devPassword = process.env.DEV_PASSWORD
 
-        if (devEmail && devPassword && lowerId === devEmail && password === devPassword) {
-            return NextResponse.json({
+        if (devEmail && devPassword && lowerId === devEmail && secureCompare(password, devPassword)) {
+            const response = NextResponse.json({
                 success: true,
                 role: 'dev',
                 user: { email: devEmail, nombre: 'Desarrollador' },
                 redirect: '/dev'
             })
+            return setSessionCookie(response, { role: 'dev' })
         }
 
         const supabase = createClient(supabaseUrl, supabaseKey)
@@ -50,7 +77,7 @@ export async function POST(req: NextRequest) {
             if (admin) {
                 const match = await bcrypt.compare(password, admin.password_hash)
                 if (match) {
-                    return NextResponse.json({
+                    const response = NextResponse.json({
                         success: true,
                         role: 'admin',
                         user: {
@@ -62,6 +89,7 @@ export async function POST(req: NextRequest) {
                         },
                         redirect: '/admin'
                     })
+                    return setSessionCookie(response, { role: 'admin', sucursal_id: admin.sucursal_id })
                 }
             }
         }
@@ -78,12 +106,13 @@ export async function POST(req: NextRequest) {
         if (barbero) {
             const match = await bcrypt.compare(password, barbero.password_hash)
             if (match) {
-                return NextResponse.json({
+                const response = NextResponse.json({
                     success: true,
                     role: 'barbero',
                     user: barbero,
                     redirect: '/tablet'
                 })
+                return setSessionCookie(response, { role: 'barbero', sucursal_id: barbero.sucursal_id })
             }
         }
 

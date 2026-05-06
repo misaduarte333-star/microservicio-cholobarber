@@ -6,7 +6,7 @@ import { addMinutes, subMinutes } from 'date-fns'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const CRON_SECRET = process.env.CRON_SECRET || 'cholo-secret-cron-2026'
+const CRON_SECRET = process.env.CRON_SECRET
 
 const APP_TIMEZONE = 'America/Hermosillo'
 
@@ -34,6 +34,12 @@ export async function GET(req: NextRequest) {
         const authHeader = req.headers.get('Authorization')
         const searchParams = req.nextUrl.searchParams
         const querySecret = searchParams.get('secret')
+
+        // FIX: CRON_SECRET es requerido, no hay fallback
+        if (!CRON_SECRET) {
+            console.error('[CRON_REMINDERS] CRON_SECRET no está configurado')
+            return NextResponse.json({ error: 'CRON_SECRET no configurado en el servidor' }, { status: 500 })
+        }
 
         if (authHeader !== `Bearer ${CRON_SECRET}` && querySecret !== CRON_SECRET) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 })

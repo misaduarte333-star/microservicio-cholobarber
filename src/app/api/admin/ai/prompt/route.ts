@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { getAISupabaseClient } from '@/lib/ai/tools/business.tools'
 import { buildSystemPrompt } from '@/lib/ai/prompts'
+import { requireAdminAuth } from '@/lib/auth'
 
 export async function GET(req: Request) {
+    const auth = await requireAdminAuth(req)
+    if (!auth.authenticated) return auth.response!
+
     const { searchParams } = new URL(req.url)
     const sucursalId = searchParams.get('sucursalId')
 

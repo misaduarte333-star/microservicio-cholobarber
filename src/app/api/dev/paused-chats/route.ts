@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { redis } from '@/lib/ai/debouncer.service'
+import { requireDevAuth } from '@/lib/auth'
 
 /**
  * GET /api/dev/paused-chats?sucursalId=xxx
@@ -7,6 +8,9 @@ import { redis } from '@/lib/ai/debouncer.service'
  * Fusiona automáticamente entradas duplicadas (LID y número del mismo contacto).
  */
 export async function GET(req: Request) {
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
     try {
         const { searchParams } = new URL(req.url)
         const sucursalId = searchParams.get('sucursalId')
@@ -97,6 +101,9 @@ export async function GET(req: Request) {
  * Elimina la pausa manual de un chat específico (y su alias si existe).
  */
 export async function DELETE(req: Request) {
+    const auth = await requireDevAuth(req)
+    if (!auth.authenticated) return auth.response!
+
     try {
         const { sucursalId, chatId } = await req.json()
 
