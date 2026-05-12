@@ -115,7 +115,6 @@ export class AgentService {
                 modelName: ctx.aiModel,
                 temperature: 0,
                 maxTokens: MAX_OUTPUT_TOKENS,
-                timeout: LLM_TIMEOUT_MS,
                 maxRetries: 2
             })
         } else if (ctx.aiProvider === 'groq' && ctx.groqKey) {
