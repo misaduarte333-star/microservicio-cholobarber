@@ -17,6 +17,7 @@ export interface AgentContext {
     nombre: string
     agentName: string
     personality: string
+    greeting?: string | null
     timezone: string
     customPrompt?: string | null
     tipoPrestador?: string       // 'barbero' | 'estilista' | 'pedicurista' | etc.
