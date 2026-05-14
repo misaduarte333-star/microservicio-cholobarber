@@ -52,7 +52,8 @@ export default function GestorNegocios() {
         intervention_pause_enabled: true,
         intervention_pause_duration: 60,
         // Números bloqueados
-        blocked_phones: [] as string[]
+        blocked_phones: [] as string[],
+        slot_booking_mode: 'by_service' as 'by_service' | 'fixed_30min'
     })
 
     const [newBlockedPhone, setNewBlockedPhone] = useState('')
@@ -187,7 +188,8 @@ export default function GestorNegocios() {
                 minutos_tardanza_mensaje: form.minutos_tardanza_mensaje,
                 intervention_pause_enabled: form.intervention_pause_enabled,
                 intervention_pause_duration: form.intervention_pause_duration,
-                blocked_phones: form.blocked_phones
+                blocked_phones: form.blocked_phones,
+                slot_booking_mode: form.slot_booking_mode
             }
 
             if (isEditing) {
@@ -232,7 +234,8 @@ export default function GestorNegocios() {
                 minutos_tardanza_mensaje: 15,
                 intervention_pause_enabled: true,
                 intervention_pause_duration: 60,
-                blocked_phones: [] as string[]
+                blocked_phones: [] as string[],
+                slot_booking_mode: 'by_service'
             })
             setIsCreating(false)
             setEditingId(null)
@@ -268,7 +271,8 @@ export default function GestorNegocios() {
             minutos_tardanza_mensaje: s.minutos_tardanza_mensaje || 15,
             intervention_pause_enabled: s.intervention_pause_enabled !== undefined ? s.intervention_pause_enabled : true,
             intervention_pause_duration: s.intervention_pause_duration || 60,
-            blocked_phones: s.blocked_phones || []
+            blocked_phones: s.blocked_phones || [],
+            slot_booking_mode: s.slot_booking_mode || 'by_service'
         })
         setEditingId(s.id)
         setIsCreating(true)
@@ -309,6 +313,25 @@ export default function GestorNegocios() {
             fetchSucursales()
         } catch (err) {
             alert(`Error al actualizar estado: ` + formatError(err))
+        }
+    }
+
+    const toggleBookingMode = async (id: string, currentMode: 'by_service' | 'fixed_30min') => {
+        try {
+            const newMode = currentMode === 'fixed_30min' ? 'by_service' : 'fixed_30min'
+            const res = await fetch('/api/dev/negocios', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, slot_booking_mode: newMode })
+            })
+
+            if (!res.ok) {
+                const err = await res.json()
+                throw new Error(err.error)
+            }
+            fetchSucursales()
+        } catch (err) {
+            alert(`Error al actualizar modo de agendamiento: ` + formatError(err))
         }
     }
 
@@ -842,6 +865,39 @@ export default function GestorNegocios() {
                                 </div>
                             </div>
 
+                            {/* ===== SECCIÓN MODO DE AGENDAMIENTO ===== */}
+                            <div className="pt-6 border-t border-slate-700/50">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <h3 className="text-sm font-bold text-emerald-400 uppercase tracking-wider">Modo de Agendamiento (Slots)</h3>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className={`p-4 rounded-xl border transition-all cursor-pointer ${form.slot_booking_mode === 'by_service' ? 'bg-emerald-500/10 border-emerald-500/40 shadow-lg shadow-emerald-500/5' : 'bg-slate-900 border-slate-700 hover:border-slate-600'}`}
+                                         onClick={() => setForm({ ...form, slot_booking_mode: 'by_service' })}>
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${form.slot_booking_mode === 'by_service' ? 'border-emerald-400' : 'border-slate-600'}`}>
+                                                {form.slot_booking_mode === 'by_service' && <div className="w-2 h-2 rounded-full bg-emerald-400" />}
+                                            </div>
+                                            <span className="font-bold text-white text-sm">Dinámico (Por Duración)</span>
+                                        </div>
+                                        <p className="text-xs text-slate-400 leading-relaxed">
+                                            Las citas se agendan según la duración real de cada servicio (ej: 45 min, 1h). Recomendado para la mayoría de los negocios.
+                                        </p>
+                                    </div>
+                                    <div className={`p-4 rounded-xl border transition-all cursor-pointer ${form.slot_booking_mode === 'fixed_30min' ? 'bg-purple-500/10 border-purple-500/40 shadow-lg shadow-purple-500/5' : 'bg-slate-900 border-slate-700 hover:border-slate-600'}`}
+                                         onClick={() => setForm({ ...form, slot_booking_mode: 'fixed_30min' })}>
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${form.slot_booking_mode === 'fixed_30min' ? 'border-purple-400' : 'border-slate-600'}`}>
+                                                {form.slot_booking_mode === 'fixed_30min' && <div className="w-2 h-2 rounded-full bg-purple-400" />}
+                                            </div>
+                                            <span className="font-bold text-white text-sm">Fijo (Slots de 30 min)</span>
+                                        </div>
+                                        <p className="text-xs text-slate-400 leading-relaxed">
+                                            FUERZA a que todas las citas ocupen bloques de exactamente 30 minutos, sin importar la duración del servicio. (Ej: Cholo Barber).
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* ===== SECCIÓN NÚMEROS BLOQUEADOS ===== */}
                             <div className="pt-6 border-t border-slate-700/50">
                                 <div className="flex items-center justify-between mb-4">
@@ -1045,8 +1101,21 @@ export default function GestorNegocios() {
                                     </div>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span className="text-slate-500">Plan:</span>
                                     <span className="capitalize font-medium text-emerald-300">{s.plan}</span>
+                                </div>
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-slate-500 text-xs">Modo Slots:</span>
+                                    <button 
+                                        onClick={() => toggleBookingMode(s.id, s.slot_booking_mode)}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all active:scale-95 border ${
+                                            s.slot_booking_mode === 'fixed_30min'
+                                                ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' 
+                                                : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                        }`}
+                                        title="Clic para cambiar entre duración real o bloques de 30 min"
+                                    >
+                                        {s.slot_booking_mode === 'fixed_30min' ? 'FIJO 30M' : 'DINÁMICO'}
+                                    </button>
                                 </div>
                                 {s.telefono_whatsapp && (
                                     <div className="flex justify-between">

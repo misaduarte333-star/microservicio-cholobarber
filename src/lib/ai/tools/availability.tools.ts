@@ -386,6 +386,7 @@ function makeDisponibilidadBase(sucursalId: string, toolName: string, descriptio
                 return JSON.stringify({
                     slot_revisado: formatInTimeZone(dateStart, timezone, 'yyyy-MM-dd HH:mm'),
                     dia: dayName,
+                    slot_booking_mode: slotBookingMode,
                     barberos: resultRows,
                     _databaseInteraction: ['sucursales', 'barberos', 'citas', 'bloqueos']
                 })

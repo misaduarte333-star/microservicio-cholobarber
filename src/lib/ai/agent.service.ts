@@ -189,10 +189,10 @@ export class AgentService {
             console.log(`Custom Prompt found: ${ctx.customPrompt ? 'YES' : 'NO'}`)
             if (ctx.customPrompt) console.log(`Custom Prompt Content:\n${ctx.customPrompt}`)
 
-            let result = await agent.invoke({
-                messages: messages,
-                recursionLimit: 12 // Límite reducido para evitar costos altos si el modelo entra en loop
-            })
+            let result = await agent.invoke(
+                { messages: messages },
+                { recursionLimit: 12 } // Límite reducido para evitar costos altos si el modelo entra en loop
+            )
 
             // 6.5 VALIDAR COMPLIANCE DE TOOLS (Enforcement) - MODO ESTRICTO
             let enforcementCheck = enforceToolCompliance(result, {

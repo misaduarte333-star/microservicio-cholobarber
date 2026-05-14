@@ -163,11 +163,12 @@ export const makeAgendarCitaTool = (sucursalId: string, timezone: string) => {
                     })
                 }
 
-                if (!cliente_id || cliente_id.length < 10) {
+                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+                if (!cliente_id || !uuidRegex.test(cliente_id)) {
                      return JSON.stringify({
                         status: 'error',
                         error: 'CLIENTE_ID_INVALIDO',
-                        instruccion_para_agente: 'No tienes un ID de cliente válido. Debes llamar primero a BUSCAR_CLIENTE con el nombre del usuario para registrarlo.'
+                        instruccion_para_agente: 'El cliente_id proporcionado no es un UUID válido. DEBES llamar primero a BUSCAR_CLIENTE pasando el nombre del usuario para obtener su ID real de base de datos antes de agendar.'
                     })
                 }
 

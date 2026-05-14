@@ -67,7 +67,8 @@ export async function POST(req: NextRequest) {
             tipo_prestador, tipo_prestador_label,
             llm_provider, llm_model,
             recordatorios_activos, minutos_antes_recordatorio, minutos_tardanza_mensaje,
-            intervention_pause_enabled, intervention_pause_duration
+            intervention_pause_enabled, intervention_pause_duration,
+            slot_booking_mode
         } = await req.json()
 
         if (!nombre || !slug || !adminEmail || !adminPassword || !telefono_whatsapp) {
@@ -109,7 +110,8 @@ export async function POST(req: NextRequest) {
                     minutos_antes_recordatorio: minutos_antes_recordatorio || 15,
                     minutos_tardanza_mensaje: minutos_tardanza_mensaje || 15,
                     intervention_pause_enabled: intervention_pause_enabled !== undefined ? intervention_pause_enabled : true,
-                    intervention_pause_duration: intervention_pause_duration || 60
+                    intervention_pause_duration: intervention_pause_duration || 60,
+                    slot_booking_mode: slot_booking_mode || 'by_service'
                 }
             ])
             .select()

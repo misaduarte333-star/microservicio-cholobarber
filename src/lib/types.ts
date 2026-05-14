@@ -72,6 +72,8 @@ export interface Sucursal {
     intervention_pause_duration: number
     blocked_phones: string[] | null
     agent_timeout_ms: number
+    slot_booking_mode: 'by_service' | 'fixed_30min'
+    slot_config_updated_at: string | null
 }
 
 
