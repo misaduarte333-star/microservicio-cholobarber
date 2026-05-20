@@ -70,10 +70,10 @@ export async function GET(req: NextRequest) {
             || process.env.APP_URL
             || (forwardedHost ? `${forwardedProto}://${forwardedHost}` : req.url)
 
-        // Sincronizar webhook primero (esto consume tiempo de Supabase/Red)
-        const syncRes = await EvolutionService.syncWebhook(appUrlForSync)
-        results.evolution.synced = syncRes.success
-        results.evolution.message = syncRes.message
+        // Sincronizar webhook en background (no bloqueamos el healthcheck)
+        EvolutionService.syncWebhook(appUrlForSync).catch(console.error)
+        results.evolution.synced = true
+        results.evolution.message = 'Sync disparado en background'
 
         // Obtener configuración para el ping individual
         const supabase = createClient()
@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
             const response = await fetch(`${evoUrl}/instance/fetchInstances`, {
                 method: 'GET',
                 headers: { 'apikey': evoKey },
-                signal: AbortSignal.timeout(5000)
+                signal: AbortSignal.timeout(2000)
             })
 
             if (response.ok) {
