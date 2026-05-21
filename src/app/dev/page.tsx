@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase'
+import { createClient, getEnv } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 
 interface TableInfo {
@@ -66,11 +66,12 @@ export default function DevPage() {
     const [aiMsg, setAiMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
     useEffect(() => {
-        // Environment info
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+        // Environment info — usamos getEnv() para leer en runtime desde window.ENV,
+        // evitando el inlining estático de Next.js con el placeholder del Dockerfile.
+        const supabaseUrl = getEnv('NEXT_PUBLIC_SUPABASE_URL')
         setEnvInfo([
             { key: 'SUPABASE_URL', value: supabaseUrl ? 'Configurado' : 'No configurado' },
-            { key: 'SUPABASE_ANON_KEY', value: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'Configurado' : 'No configurado' },
+            { key: 'SUPABASE_ANON_KEY', value: getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY') ? 'Configurado' : 'No configurado' },
             { key: 'Entorno', value: process.env.NODE_ENV || 'unknown' },
         ])
 

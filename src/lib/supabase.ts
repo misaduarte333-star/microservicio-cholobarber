@@ -1,6 +1,22 @@
 import { createBrowserClient } from '@supabase/ssr'
 import type { Database } from './types'
 
+/**
+ * Lee una variable de entorno en runtime evitando el inlining estático de Next.js.
+ * - En el CLIENTE: lee desde `window.ENV` (inyectado por el layout del servidor).
+ * - En el SERVIDOR / API routes: lee desde `process.env` directamente.
+ * Esto es necesario porque el Dockerfile usa placeholders en build-time para no
+ * guardar secretos reales en la imagen, y Next.js reemplaza process.env.NEXT_PUBLIC_*
+ * estáticamente en el bundle. Con window.ENV la app siempre usa las vars reales.
+ */
+export const getEnv = (key: string): string => {
+    if (typeof window !== 'undefined') {
+        const winEnv = (window as any).ENV
+        if (winEnv && winEnv[key]) return winEnv[key]
+    }
+    return process.env[key] || ''
+}
+
 // Check if Supabase is configured
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -12,11 +28,12 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
  * @returns true si falta configuración, de lo contrario false.
  */
 export const getIsDemoMode = () => {
-    const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const SUPABASE_URL = getEnv('NEXT_PUBLIC_SUPABASE_URL')
+    const SUPABASE_ANON_KEY = getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
 
     return !SUPABASE_URL || !SUPABASE_ANON_KEY ||
         SUPABASE_URL === 'https://your-project.supabase.co' ||
+        SUPABASE_URL === 'https://placeholder.supabase.co' ||
         SUPABASE_URL === ''
 }
 
@@ -66,12 +83,12 @@ export function createClient(): ReturnType<typeof createBrowserClient<Database>>
         return createMockClient() as unknown as ReturnType<typeof createBrowserClient<Database>>
     }
 
-    const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const SUPABASE_URL = getEnv('NEXT_PUBLIC_SUPABASE_URL')
+    const SUPABASE_ANON_KEY = getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
 
     return createBrowserClient<Database>(
-        SUPABASE_URL!,
-        SUPABASE_ANON_KEY!
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY
     )
 }
 
