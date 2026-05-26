@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js'
  */
 export function getAISupabaseClient() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     if (!url || !key) {
         console.error('[IA_DIAGNOSTIC] Supabase ENV missing in business.tools!', { url: !!url, key: !!key })
     }

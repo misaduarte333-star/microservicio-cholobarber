@@ -10,6 +10,8 @@ const inter = Inter({
     display: 'swap',
 })
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
     title: 'BotDynamic - Gestión Inteligente',
     description: 'Sistema inteligente de gestión de citas y agente IA para barberías',

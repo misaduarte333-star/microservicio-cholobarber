@@ -28,13 +28,7 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
  * @returns true si falta configuración, de lo contrario false.
  */
 export const getIsDemoMode = () => {
-    const SUPABASE_URL = getEnv('NEXT_PUBLIC_SUPABASE_URL')
-    const SUPABASE_ANON_KEY = getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
-
-    return !SUPABASE_URL || !SUPABASE_ANON_KEY ||
-        SUPABASE_URL === 'https://your-project.supabase.co' ||
-        SUPABASE_URL === 'https://placeholder.supabase.co' ||
-        SUPABASE_URL === ''
+    return false
 }
 
 // Mock Supabase client for demo mode

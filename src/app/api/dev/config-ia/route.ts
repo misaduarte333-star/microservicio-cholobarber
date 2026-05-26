@@ -4,7 +4,7 @@ import { requireDevAuth } from '@/lib/auth'
 import type { ConfigIA } from '@/lib/types.config-ia'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const TABLE = 'configuracion_ia_global'
 
 export async function GET(req: Request) {
