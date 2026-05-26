@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import { requireDevAuth } from '@/lib/auth'
 
 const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env['SUPABASE_URL'] || process.env['NEXT_PUBLIC_SUPABASE_URL'] || '',
+    process.env['SUPABASE_SERVICE_ROLE_KEY'] || process.env['SUPABASE_KEY'] || process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] || ''
 )
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {

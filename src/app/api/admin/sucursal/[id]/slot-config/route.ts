@@ -21,8 +21,8 @@ export async function PATCH(
 
     const { id } = await params
     const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        process.env['SUPABASE_URL'] || process.env['NEXT_PUBLIC_SUPABASE_URL'] || '',
+        process.env['SUPABASE_SERVICE_ROLE_KEY'] || process.env['SUPABASE_KEY'] || process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] || ''
     )
 
     try {
@@ -38,7 +38,7 @@ export async function PATCH(
 
         const validModes = ['fixed_30min', 'fixed_1hour', 'by_service']
         if (!validModes.includes(slot_booking_mode)) {
-            return NextResponse.json({ 
+            return NextResponse.json({
                 error: `slot_booking_mode debe ser uno de: ${validModes.join(', ')}`
             }, { status: 400 })
         }
@@ -46,7 +46,7 @@ export async function PATCH(
         // Actualizar la sucursal
         const { data, error } = await supabase
             .from('sucursales')
-            .update({ 
+            .update({
                 slot_booking_mode,
                 slot_config_updated_at: new Date().toISOString()
             })
@@ -75,7 +75,7 @@ export async function PATCH(
 
 /**
  * GET /api/admin/sucursal/[id]/slot-config
- * 
+ *
  * Obtiene la configuración actual de slots de una sucursal.
  */
 export async function GET(
@@ -87,8 +87,8 @@ export async function GET(
 
     const { id } = await params
     const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        process.env['SUPABASE_URL'] || process.env['NEXT_PUBLIC_SUPABASE_URL'] || '',
+        process.env['SUPABASE_SERVICE_ROLE_KEY'] || process.env['SUPABASE_KEY'] || process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] || ''
     )
 
     try {

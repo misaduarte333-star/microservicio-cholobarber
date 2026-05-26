@@ -6,8 +6,8 @@ import { EvolutionService } from '@/lib/evolution.service'
 
 
 const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env['SUPABASE_URL'] || process.env['NEXT_PUBLIC_SUPABASE_URL'] || '',
+    process.env['SUPABASE_SERVICE_ROLE_KEY'] || process.env['SUPABASE_KEY'] || process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] || ''
 )
 
 const CHOLO_BARBER_ID = process.env.CHOLO_BARBER_ID || 'f07a7640-9d86-499f-a048-24109345787a'
