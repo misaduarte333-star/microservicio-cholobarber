@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
             const response = await fetch(`${evoUrl}/instance/fetchInstances`, {
                 method: 'GET',
                 headers: { 'apikey': evoKey },
-                signal: AbortSignal.timeout(2000)
+                signal: AbortSignal.timeout(5000)
             })
 
             if (response.ok) {

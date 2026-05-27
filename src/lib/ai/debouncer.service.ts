@@ -8,10 +8,17 @@ const globalForRedis = globalThis as unknown as {
 }
 
 export const redis = globalForRedis.redis ?? new Redis(process.env.AGENT_REDIS_URL!, {
-    connectTimeout: 2000,
-    commandTimeout: 2000,
+    connectTimeout: 5000,
+    commandTimeout: 3000,
     maxRetriesPerRequest: 1,
-    retryStrategy: (times) => null, // Desactivar reconexiones infinitas en dev
+    // En producción: backoff exponencial capeado en 30s para reconectar si Redis se reinicia brevemente.
+    // En dev: sin reintentos para no colgar la terminal con mensajes de error en lóop.
+    retryStrategy: (times) => {
+        if (process.env.NODE_ENV !== 'production') return null // Sin reintentos en dev
+        const delay = Math.min(times * 500, 30000) // 0.5s, 1s, 1.5s... máx 30s
+        console.warn(`[Redis] Reconectando en ${delay}ms (intento ${times})...`)
+        return delay
+    },
     enableOfflineQueue: false     // No encolar comandos si está desconectado
 })
 
@@ -284,7 +291,7 @@ export class DebouncerService {
 
             // 4. Enviar a Evolution
             if (evoEndpoint && output) {
-                const sent = await this.sendEvolutionMessage(evoEndpoint, evoToken, phone, output)
+                const sent = await this.sendEvolutionMessage(evoEndpoint, evoToken, remoteJid, output)
                 if (sent && redis.status === 'ready') {
                     try { await redis.del(unsentKey) } catch {}
                 } else if (!sent) {

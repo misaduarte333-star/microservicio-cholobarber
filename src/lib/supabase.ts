@@ -17,9 +17,9 @@ export const getEnv = (key: string): string => {
     return process.env[key] || ''
 }
 
-// Check if Supabase is configured
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+// Eliminadas variables globales para evitar inlining del placeholder en Next.js
+// const SUPABASE_URL = process.env['NEXT_PUBLIC_SUPABASE_URL']
+// const SUPABASE_ANON_KEY = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY']
 
 // Flag to check if we're in demo mode
 /**

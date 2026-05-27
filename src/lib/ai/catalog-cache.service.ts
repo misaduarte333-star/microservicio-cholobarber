@@ -97,19 +97,25 @@ CATÁLOGO DEL NEGOCIO (PRE-CARGADO)
     /**
      * Invalida la caché de una sucursal específica.
      */
-    public static async invalidate(sucursalId: string): Promise<boolean> {
-        const cacheKey = `${this.CACHE_KEY_PREFIX}${sucursalId}`
-        if (redis.status === 'ready') {
-            try {
+    public static async invalidate(sucursalId: string, prestadorLabel?: string): Promise<boolean> {
+        if (redis.status !== 'ready') return false
+        try {
+            if (prestadorLabel) {
+                // Invalidar el label específico
+                const cacheKey = `${this.CACHE_KEY_PREFIX}${sucursalId}:${prestadorLabel.toLowerCase()}`
                 await redis.del(cacheKey)
-                console.info(`[CatalogCacheService] Caché INVALIDADA manualmente para ${sucursalId}.`)
-                return true
-            } catch (err) {
-                console.error(`[CatalogCacheService] Error al invalidar caché para ${sucursalId}:`, err)
-                return false
+            } else {
+                // Invalidar TODOS los labels de esta sucursal mediante SCAN
+                const pattern = `${this.CACHE_KEY_PREFIX}${sucursalId}:*`
+                const keys = await redis.keys(pattern)
+                if (keys.length > 0) await redis.del(...keys)
             }
+            console.info(`[CatalogCacheService] Caché INVALIDADA manualmente para ${sucursalId}.`)
+            return true
+        } catch (err) {
+            console.error(`[CatalogCacheService] Error al invalidar caché para ${sucursalId}:`, err)
+            return false
         }
-        return false
     }
 
     /**

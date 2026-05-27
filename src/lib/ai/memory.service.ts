@@ -12,7 +12,7 @@ const pool = globalForPg.pgPool ?? new Pool({
     connectionString: process.env.DATABASE_URL,
     max: 3, // Reducido para evitar agotar conexiones en serverless/edge (NH-07)
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 5000, // Aumentado a 5s: en servidores compartidos el pool puede tardar en liberar conexiones
 })
 
 if (process.env.NODE_ENV !== 'production') globalForPg.pgPool = pool

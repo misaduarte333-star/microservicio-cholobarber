@@ -42,7 +42,7 @@ export class EvolutionService {
             // 2. Consultar webhook actual en Evolution
             const findRes = await fetch(`${evoBaseUrl}webhook/find/${instance}`, {
                 headers: { apikey },
-                signal: AbortSignal.timeout(5000)
+                signal: AbortSignal.timeout(15000)
             })
 
             let needsUpdate = true
@@ -77,7 +77,7 @@ export class EvolutionService {
                         events: ['MESSAGES_UPSERT']
                     }
                 }),
-                signal: AbortSignal.timeout(10000)
+                signal: AbortSignal.timeout(30000)
             })
 
             if (!setRes.ok) {

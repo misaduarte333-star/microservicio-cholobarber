@@ -38,10 +38,12 @@ export default function RootLayout({
 }>) {
     // Estas variables se resuelven en el SERVIDOR en cada request (runtime),
     // no en build-time, por lo que siempre contienen los valores reales.
+    // Usamos notación de corchetes y variables que no empiezan con NEXT_PUBLIC_ 
+    // para evitar que Next.js las reemplace con placeholders estáticos en build-time.
     const runtimeEnv = {
-        NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
-        NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || '',
+        NEXT_PUBLIC_SUPABASE_URL: process.env.SUPABASE_URL || process.env['NEXT_PUBLIC_SUPABASE_URL'] || '',
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.SUPABASE_KEY || process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] || '',
+        NEXT_PUBLIC_APP_URL: process.env.APP_URL || process.env['NEXT_PUBLIC_APP_URL'] || '',
     }
 
     return (
