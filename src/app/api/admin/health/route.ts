@@ -81,7 +81,8 @@ export async function GET(req: NextRequest) {
         const config = data as any
         
         // Determinar URL y Key usando DB con fallback a ENV
-        const evoUrl = config?.evolution_api_url || process.env.EVOLUTION_API_URL
+        // Priorizar URL interna (Docker/Easypanel) para evitar Hairpin NAT
+        const evoUrl = process.env.EVOLUTION_API_INTERNAL_URL || config?.evolution_api_url || process.env.EVOLUTION_API_URL
         const evoKey = config?.evolution_api_key || process.env.EVOLUTION_API_KEY
 
         if (evoUrl) {

@@ -20,7 +20,8 @@ export class EvolutionService {
                 .eq('id', 1)
                 .single()
             const config = data as any
-            const evoUrlRaw = config?.evolution_api_url || process.env.EVOLUTION_API_URL
+            // Prioridad: 1. URL Interna (Docker), 2. DB (Pública), 3. ENV (Pública)
+            const evoUrlRaw = process.env.EVOLUTION_API_INTERNAL_URL || config?.evolution_api_url || process.env.EVOLUTION_API_URL
             const apikey = config?.evolution_api_key || process.env.EVOLUTION_API_KEY
 
             if (!evoUrlRaw) {
@@ -30,14 +31,15 @@ export class EvolutionService {
             const evoBaseUrl = evoUrlRaw.endsWith('/') ? evoUrlRaw : `${evoUrlRaw}/`
 
             const instance = process.env.EVOLUTION_INSTANCE || 'barberia'
-            // Priorizar variable de entorno pública en lugar de la URL interna del contenedor
-            // (dentro de Docker/EasyPanel, req.url puede resolver a 0.0.0.0 o a localhost)
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+            // Priorizar URL interna para webhook si están en el mismo entorno Docker/Easypanel
+            // Esto evita que Evolution API falle al intentar alcanzar el dominio público por problemas de Hairpin NAT.
+            const baseUrl = process.env.INTERNAL_APP_URL 
+                || process.env.NEXT_PUBLIC_APP_URL
                 || process.env.APP_URL
                 || (() => { try { return new URL(appUrl).origin } catch { return appUrl } })()
             const webhookUrl = `${baseUrl}/api/webhook/evolution`
 
-            console.log(`[EvolutionSync] Verificando webhook para instancia ${instance} -> ${webhookUrl}`)
+            console.log(`[EvolutionSync] Verificando webhook para instancia ${instance} -> ${webhookUrl} usando Evolution API en ${evoBaseUrl}`)
 
             // 2. Consultar webhook actual en Evolution
             const findRes = await fetch(`${evoBaseUrl}webhook/find/${instance}`, {

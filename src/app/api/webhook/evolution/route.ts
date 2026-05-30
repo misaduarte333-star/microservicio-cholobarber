@@ -139,8 +139,10 @@ export async function POST(req: Request) {
             }
         }
 
-        const apiBaseGlobal = configIa?.evolution_api_url?.endsWith('/') ? configIa.evolution_api_url : `${configIa?.evolution_api_url}/`
-        const evoTokenGlobal = configIa?.evolution_api_key
+        // Priorizar URL interna (Docker/Easypanel) para evitar Hairpin NAT
+        const rawEvoUrl = process.env.EVOLUTION_API_INTERNAL_URL || configIa?.evolution_api_url || process.env.EVOLUTION_API_URL || ''
+        const apiBaseGlobal = rawEvoUrl.endsWith('/') ? rawEvoUrl : `${rawEvoUrl}/`
+        const evoTokenGlobal = configIa?.evolution_api_key || process.env.EVOLUTION_API_KEY
 
         let messageText = ''
         if (messageType === 'conversation' || messageType === 'extendedTextMessage') {
@@ -202,7 +204,7 @@ export async function POST(req: Request) {
                     await debouncerService.clearSession(senderPhone, currentTestBranch, senderPhone)
                 }
                 await debouncerService.setTestBranch(senderPhone, null)
-                await EvolutionService.sendTextMessage(process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, '🔄 Pruebas reiniciadas. Historial borrado.\n\nEnvía cualquier mensaje para elegir negocio.')
+                await EvolutionService.sendTextMessage(process.env.EVOLUTION_API_INTERNAL_URL || process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, '🔄 Pruebas reiniciadas. Historial borrado.\n\nEnvía cualquier mensaje para elegir negocio.')
                 return NextResponse.json({ received: true, action: 'test_reset' })
             }
 
@@ -230,12 +232,12 @@ export async function POST(req: Request) {
                     await debouncerService.setTestBranch(senderPhone, match.id)
                     const { data } = await supabase.from('sucursales').select('*').eq('id', match.id).single()
                     sucursal = data
-                    await EvolutionService.sendTextMessage(process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, `✅ Entrando en modo de pruebas para: *${match.nombre}*.\n\nEscribe "Reiniciar pruebas" para cambiar.`)
+                    await EvolutionService.sendTextMessage(process.env.EVOLUTION_API_INTERNAL_URL || process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, `✅ Entrando en modo de pruebas para: *${match.nombre}*.\n\nEscribe "Reiniciar pruebas" para cambiar.`)
                 } else {
                     const list = sucursales?.map((s, i) => `${i + 1}. *${s.nombre}*`).join('\n') || 'No hay negocios configurados.'
                     // Mostrar escribiendo antes del prompt de selección
-                    await EvolutionService.sendPresence(process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, 'composing')
-                    await EvolutionService.sendTextMessage(process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, `🧪 *MODO DE PRUEBAS*\n\n¿Qué negocio quieres probar hoy?\n\n${list}\n\nEscribe el nombre del negocio para comenzar.`)
+                    await EvolutionService.sendPresence(process.env.EVOLUTION_API_INTERNAL_URL || process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, 'composing')
+                    await EvolutionService.sendTextMessage(process.env.EVOLUTION_API_INTERNAL_URL || process.env.EVOLUTION_API_URL!, process.env.EVOLUTION_API_KEY!, instanceName, remoteJid, `🧪 *MODO DE PRUEBAS*\n\n¿Qué negocio quieres probar hoy?\n\n${list}\n\nEscribe el nombre del negocio para comenzar.`)
                     return NextResponse.json({ received: true, action: 'test_routing_prompt' })
                 }
             }
