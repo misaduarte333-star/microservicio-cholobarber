@@ -104,8 +104,9 @@ export async function GET(req: NextRequest) {
                     const phone = sanitizePhone(cita.cliente_telefono)
                     const message = `Hola ${cita.cliente_nombre}, te recordamos tu cita de hoy a las ${horaLocal} con el ${label} ${barbero.nombre}. ¡Te esperamos!`
                     
+                    const evoUrlToUse = process.env.EVOLUTION_API_INTERNAL_URL || globalConfig.evolution_api_url
                     const sent = await EvolutionService.sendTextMessage(
-                        globalConfig.evolution_api_url,
+                        evoUrlToUse,
                         apikey,
                         instance,
                         phone,
@@ -142,8 +143,9 @@ export async function GET(req: NextRequest) {
                     const phone = sanitizePhone(cita.cliente_telefono)
                     const message = `Hola ${cita.cliente_nombre}, ¿vas en camino? Tu cita registrada era a las ${horaLocal}. Si deseas, podemos intentar reagendarla para un espacio disponible más tarde hoy. ¿Deseas que busque un lugar?`
                     
+                    const evoUrlToUse = process.env.EVOLUTION_API_INTERNAL_URL || globalConfig.evolution_api_url
                     const sent = await EvolutionService.sendTextMessage(
-                        globalConfig.evolution_api_url,
+                        evoUrlToUse,
                         apikey,
                         instance,
                         phone,

@@ -18,12 +18,13 @@ export async function POST(req: NextRequest) {
         const { data: rawConfig } = await supabase.from('configuracion_ia_global').select('*').eq('id', 1).single()
         const config = rawConfig as ConfigIA | null
 
-        if (!config || !config.evolution_api_url) {
+        const evoUrlRaw = process.env.EVOLUTION_API_INTERNAL_URL || config.evolution_api_url
+        if (!evoUrlRaw) {
             return NextResponse.json({ error: 'Configuración global de Evolution no encontrada' }, { status: 500 })
         }
 
-        const evoBaseUrl = config.evolution_api_url.endsWith('/') ? config.evolution_api_url : `${config.evolution_api_url}/`
-        const apikey = evolutionKey || config.evolution_api_key
+        const evoBaseUrl = evoUrlRaw.endsWith('/') ? evoUrlRaw : `${evoUrlRaw}/`
+        const apikey = evolutionKey || config.evolution_api_key || process.env.EVOLUTION_API_KEY
 
         const res = await fetch(`${evoBaseUrl}instance/connectionState/${instanceName}`, {
             headers: { apikey },
