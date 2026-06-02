@@ -288,6 +288,101 @@ export default function DevPage() {
                     </Link>
                 </div>
 
+                {/* Apps de Prueba */}
+                <div className="glass-card p-6 mb-8 border-t-4 border-t-blue-500 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                        <svg className="w-32 h-32 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    
+                    <div className="flex items-center justify-between mb-6 relative z-10">
+                        <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                            <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                            </svg>
+                            Entornos de Aplicación (Frontends)
+                        </h2>
+                        <button
+                            onClick={async (e) => {
+                                const btn = e.currentTarget;
+                                btn.disabled = true;
+                                btn.textContent = 'Configurando...';
+                                try {
+                                    const res = await fetch('/api/internal/test-apps/reset', { method: 'POST' });
+                                    const data = await res.json().catch(() => ({}));
+                                    if (res.ok && data.success) {
+                                        alert('✅ Cuentas sincronizadas:\n' + (data.results || []).join('\n'));
+                                    } else {
+                                        alert('❌ Error: ' + (data.error || 'Error desconocido. Revisa la consola del servidor.'));
+                                    }
+                                } catch (err) {
+                                    alert('❌ Error de red al conectar con el servidor.');
+                                } finally {
+                                    btn.disabled = false;
+                                    btn.textContent = 'Sincronizar Credenciales en BD';
+                                }
+                            }}
+                            className="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors shadow-sm"
+                            title="Asegura que los negocios y usuarios admin de prueba existan en Supabase con estas contraseñas"
+                        >
+                            Sincronizar Credenciales en BD
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+                        {/* App Básico */}
+                        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-700/80 hover:border-blue-500/50 transition-colors group">
+                            <div className="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 className="text-white font-bold text-base mb-1 group-hover:text-blue-400 transition-colors">Sonorus Básico</h3>
+                                    <a href="https://basic.sonorusapp.com/" target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:text-blue-300 hover:underline font-mono flex items-center gap-1">
+                                        https://basic.sonorusapp.com/
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                    </a>
+                                </div>
+                                <span className="px-2 py-1 rounded bg-slate-800 text-slate-400 text-[10px] font-bold uppercase border border-slate-700">Plan Básico</span>
+                            </div>
+                            
+                            <div className="space-y-3 mt-4 pt-4 border-t border-slate-800">
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Email de Acceso (Prueba)</span>
+                                    <code className="text-sm text-emerald-400 bg-slate-950 px-2 py-1 rounded border border-slate-800 font-mono select-all">basico@sonorusapp.com</code>
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Contraseña</span>
+                                    <code className="text-sm text-emerald-400 bg-slate-950 px-2 py-1 rounded border border-slate-800 font-mono select-all">test_basico_123</code>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* App Premium */}
+                        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-700/80 hover:border-purple-500/50 transition-colors group shadow-[0_0_15px_rgba(168,85,247,0.05)]">
+                            <div className="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 className="text-white font-bold text-base mb-1 group-hover:text-purple-400 transition-colors">Sonorus Premium</h3>
+                                    <a href="https://premium.sonorusapp.com/" target="_blank" rel="noreferrer" className="text-xs text-purple-400 hover:text-purple-300 hover:underline font-mono flex items-center gap-1">
+                                        https://premium.sonorusapp.com/
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                    </a>
+                                </div>
+                                <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-400 text-[10px] font-bold uppercase border border-purple-500/30">Plan Premium</span>
+                            </div>
+                            
+                            <div className="space-y-3 mt-4 pt-4 border-t border-slate-800">
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Email de Acceso (Prueba)</span>
+                                    <code className="text-sm text-emerald-400 bg-slate-950 px-2 py-1 rounded border border-slate-800 font-mono select-all">premium@sonorusapp.com</code>
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Contraseña</span>
+                                    <code className="text-sm text-emerald-400 bg-slate-950 px-2 py-1 rounded border border-slate-800 font-mono select-all">test_premium_123</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                     {/* Environment Status */}
                     <div className="glass-card p-6 border-t-4 border-t-emerald-500">
