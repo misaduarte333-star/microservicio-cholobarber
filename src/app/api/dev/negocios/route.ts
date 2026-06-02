@@ -160,7 +160,7 @@ export async function PATCH(req: NextRequest) {
 
     try {
         const body = await req.json()
-        const { id, ...rawUpdates } = body
+        const { id, adminEmail, adminPassword, ...rawUpdates } = body
 
         if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 })
 
@@ -183,18 +183,51 @@ export async function PATCH(req: NextRequest) {
             }
         }
 
-        if (Object.keys(updates).length === 0) {
-            return NextResponse.json({ error: 'No hay campos válidos para actualizar' }, { status: 400 })
-        }
-
         const supabase = createClient(supabaseUrl, supabaseServiceKey)
         
-        const { error } = await supabase
-            .from('sucursales')
-            .update(updates)
-            .eq('id', id)
+        if (Object.keys(updates).length > 0) {
+            const { error } = await supabase
+                .from('sucursales')
+                .update(updates)
+                .eq('id', id)
 
-        if (error) throw error
+            if (error) throw error
+        }
+
+        // Handle Admin Credentials Update
+        if (adminEmail || adminPassword) {
+            const adminUpdates: Record<string, any> = {}
+            if (adminEmail) adminUpdates.email = adminEmail.toLowerCase()
+            if (adminPassword) adminUpdates.password_hash = await bcrypt.hash(adminPassword, 10)
+
+            // Find first admin of this sucursal
+            const { data: admins } = await supabase
+                .from('usuarios_admin')
+                .select('id')
+                .eq('sucursal_id', id)
+                .eq('rol', 'admin')
+                .limit(1)
+
+            if (admins && admins.length > 0) {
+                await supabase
+                    .from('usuarios_admin')
+                    .update(adminUpdates)
+                    .eq('id', admins[0].id)
+            } else if (adminEmail && adminPassword) {
+                // Si no existía un admin, creamos uno
+                await supabase
+                    .from('usuarios_admin')
+                    .insert([{
+                        sucursal_id: id,
+                        nombre: 'Administrador',
+                        email: adminEmail.toLowerCase(),
+                        password_hash: await bcrypt.hash(adminPassword, 10),
+                        rol: 'admin',
+                        activo: true
+                    }])
+            }
+        }
+
         return NextResponse.json({ success: true })
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 })

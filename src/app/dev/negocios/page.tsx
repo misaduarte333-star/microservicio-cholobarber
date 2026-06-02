@@ -194,10 +194,10 @@ export default function GestorNegocios() {
 
             if (isEditing) {
                 payload.id = editingId
-            } else {
-                payload.adminEmail = form.adminEmail
-                payload.adminPassword = form.adminPassword
             }
+            
+            if (form.adminEmail) payload.adminEmail = form.adminEmail
+            if (form.adminPassword) payload.adminPassword = form.adminPassword
 
             const res = await fetch(url, {
                 method,
@@ -253,8 +253,8 @@ export default function GestorNegocios() {
             slug: s.slug || '',
             plan: s.plan || 'basico',
             telefono_whatsapp: s.telefono_whatsapp || '',
-            adminEmail: '', // No editable here
-            adminPassword: '', // No editable here
+            adminEmail: s._stats?.admin_email || '',
+            adminPassword: '',
             agent_name: s.agent_name || 'BarberBot',
             agent_personality: s.agent_personality || 'Friendly',
             agent_instance_name: s.agent_instance_name || '',
@@ -540,35 +540,35 @@ export default function GestorNegocios() {
                                 </div>
                             </div>
 
-                            {!editingId && (
-                                <div className="pt-6 border-t border-slate-700/50">
-                                    <h3 className="text-sm font-bold text-emerald-400 uppercase tracking-wider mb-4">Credenciales del Administrador</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-300 mb-2">Correo Electronico</label>
-                                            <input
-                                                required
-                                                type="email"
-                                                value={form.adminEmail}
-                                                onChange={(e) => setForm({ ...form, adminEmail: e.target.value })}
-                                                className="input-field w-full bg-slate-900 border-slate-700"
-                                                placeholder="admin@ejemplo.com"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-300 mb-2">Contrasena Inicial</label>
-                                            <input
-                                                required
-                                                type="text"
-                                                value={form.adminPassword}
-                                                onChange={(e) => setForm({ ...form, adminPassword: e.target.value })}
-                                                className="input-field w-full bg-slate-900 border-slate-700"
-                                                placeholder="Minimo 6 caracteres"
-                                            />
-                                        </div>
+                            <div className="pt-6 border-t border-slate-700/50">
+                                <h3 className="text-sm font-bold text-emerald-400 uppercase tracking-wider mb-4">Credenciales del Administrador</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-300 mb-2">Correo Electrónico</label>
+                                        <input
+                                            required={!editingId}
+                                            type="email"
+                                            value={form.adminEmail}
+                                            onChange={(e) => setForm({ ...form, adminEmail: e.target.value })}
+                                            className="input-field w-full bg-slate-900 border-slate-700"
+                                            placeholder="admin@ejemplo.com"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                                            Contraseña {editingId && <span className="text-xs text-slate-500 font-normal">(Dejar en blanco para no cambiar)</span>}
+                                        </label>
+                                        <input
+                                            required={!editingId}
+                                            type="text"
+                                            value={form.adminPassword}
+                                            onChange={(e) => setForm({ ...form, adminPassword: e.target.value })}
+                                            className="input-field w-full bg-slate-900 border-slate-700"
+                                            placeholder="Mínimo 6 caracteres"
+                                        />
                                     </div>
                                 </div>
-                            )}
+                            </div>
 
                             <div className="pt-6 border-t border-slate-700/50">
                                 <div className="flex items-center justify-between mb-4">
